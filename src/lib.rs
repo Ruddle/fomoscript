@@ -1,19 +1,16 @@
-#[cfg(not(test))]
+#![no_std]
 use log::info;
-
-#[cfg(test)]
-use std::println as info;
 
 extern crate alloc;
 use alloc::borrow::ToOwned;
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Rem;
 use core::result::Result;
-
 /// An index to an AST node
 pub type NI = usize;
 
