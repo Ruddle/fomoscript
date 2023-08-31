@@ -2,7 +2,13 @@
 name = "fomoscript"
 version = "0.1.0"
 edition = "2021"
-
+license = "MIT"
+description = "Toy scripting language"
+homepage = "https://github.com/Ruddle/fomoscript"
+repository = "https://github.com/Ruddle/fomoscript"
+readme = "README.md"
+keywords = ["scripting", "no_std"]
+categories = ["compilers","virtualization"]
 [dependencies]
 log = "0.4"
 
