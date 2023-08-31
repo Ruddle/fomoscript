@@ -130,3 +130,25 @@ fn scope() {
         assert!(false)
     }
 }
+
+#[test]
+fn big_function() {
+    let code: Vec<char> = r#"{
+        let x = 0
+        let f = (a,b,c) => {
+            let d = 1000
+            a+b+c+d
+        }
+        f(0,1,2)
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 1003.0)
+    } else {
+        assert!(false)
+    }
+}

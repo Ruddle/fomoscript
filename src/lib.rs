@@ -1,8 +1,7 @@
 #![no_std]
 use log::info;
 extern crate alloc;
-use alloc::string::{String, ToString};
-use alloc::{collections::BTreeMap, format, vec, vec::Vec};
+use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 use core::{ops::Rem, result::Result};
 
 /// An index to an AST node
@@ -44,7 +43,7 @@ pub enum N {
     //Terminal nodes, the following nodes can be output by eval
     FuncDef {
         args_name: Vec<String>,
-        scope: Vec<NI>,
+        scope: NI,
     },
     FuncNativeDef(Native),
     Array(Vec<NI>),
@@ -132,7 +131,7 @@ impl Ctx {
         Ctx {
             ast,
             variables: BTreeMap::new(),
-            path: "_".to_string(),
+            path: String::from("_"),
         }
     }
     pub fn get_n(&self, idx: NI) -> N {
@@ -209,10 +208,10 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
         },
         N::FuncCall { func, args } => match eval(&func, ctx) {
             N::FuncNativeDef(native) => native.0(
-                args.get(0).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
-                args.get(1).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
-                args.get(2).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
-                args.get(3).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
+                args.first().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get(1).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get(2).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get(3).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
             ),
             N::FuncDef { args_name, scope } => {
                 for (i, arg) in args.iter().enumerate() {
@@ -222,10 +221,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
                     ctx.path.pop();
                 }
                 ctx.path.push('_');
-                let mut res = N::Unit;
-                for a in scope.iter() {
-                    res = eval(a, ctx);
-                }
+                let res = eval(&scope, ctx);
                 ctx.path.pop();
                 res
             }
@@ -465,9 +461,6 @@ pub fn insert_in_parent(ast: &mut AST, parent: NI, child: NI) {
         N::Block(v) => {
             v.push(child);
         }
-        N::FuncDef { scope, .. } => {
-            scope.push(child);
-        }
         N::FuncCall { args, .. } => {
             args.push(child);
         }
@@ -557,9 +550,9 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
     if let Token::FuncDefStart { args } = token {
         let scope = parse_expr(ast, i, code, pad + 1)?;
 
-        let mut n = N::FuncDef {
+        let n = N::FuncDef {
             args_name: args,
-            scope: vec![scope],
+            scope,
         };
         let block_ni: usize = ast.len();
         ast.push(n);
