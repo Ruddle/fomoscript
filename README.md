@@ -81,7 +81,7 @@ Example with the print function:
 ```rust
 let code: Vec<char> = r#"
 {
-    print(1+1)
+    my_print(1+1)
 }
 "#
 .chars()
@@ -93,7 +93,7 @@ let print_closure = Rc::new(|a: N, _, _, _| {
     println!("{}", a.to_str());
     N::Unit
 });
-ctx.set_var_absolute("print", N::FuncNativeDef(Native(print_closure)));
+ctx.set_var_absolute("my_print", N::FuncNativeDef(Native(print_closure)));
 
 let _ = eval(&0, &mut ctx);
 ```
@@ -104,3 +104,5 @@ let _ = eval(&0, &mut ctx);
 - Months of work
 - Pattern matching
 - Javascript-like objects (we just have Number and String 😱)
+- Read-Eval-Print Loop
+- Error handling (now it just UB if something goes wrong)
