@@ -81,7 +81,7 @@ fn string_concat() {
     let mut ctx = Ctx::new(ast);
     let res = eval(&0, &mut ctx);
     if let N::Str(x) = res {
-        assert_eq!(x, "hello world".to_owned())
+        assert_eq!(x, String::from("hello world"))
     } else {
         assert!(false)
     }

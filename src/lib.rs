@@ -2,8 +2,7 @@
 use log::info;
 extern crate alloc;
 use alloc::string::{String, ToString};
-use alloc::{borrow::ToOwned, collections::BTreeMap, vec::Vec};
-use alloc::{format, vec};
+use alloc::{collections::BTreeMap, format, vec, vec::Vec};
 use core::{ops::Rem, result::Result};
 
 /// An index to an AST node
@@ -121,8 +120,7 @@ pub enum Token {
     FuncDefStart { args: Vec<String> },
 }
 
-/// Interpreter context
-/// Holds all variables during execution
+/// Interpreter context, holds all state during execution.
 pub struct Ctx {
     pub ast: AST,
     pub variables: BTreeMap<String, N>,
@@ -145,7 +143,7 @@ impl Ctx {
         self.variables.insert(key, n);
     }
     pub fn set_var_absolute(&mut self, path: &str, n: N) {
-        self.variables.insert(path.to_owned(), n);
+        self.variables.insert(String::from(path), n);
     }
     /// Find a variable declared in the scope, or any parent scope
     ///
@@ -292,7 +290,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
 
     let parse_number = |i: &mut usize| {
         let backup_i = *i;
-        let mut id = "".to_owned();
+        let mut id = String::from("");
         while code[*i].is_ascii_digit() || code[*i] == '.' {
             id = format!("{}{}", id, code[*i]);
             *i += 1;
@@ -311,7 +309,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
     };
 
     let parse_ident = |i: &mut usize| {
-        let mut id = "".to_owned();
+        let mut id = String::from("");
         while code[*i].is_alphanumeric() || code[*i] == '_' {
             id = format!("{}{}", id, code[*i]);
             *i += 1;
@@ -338,11 +336,11 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
     loop {
         skip_whitespaces(i);
         if *i >= code.len() {
-            break Token::Err("i>code".to_owned());
+            break Token::Err(String::from("i>code"));
         }
 
         if code[*i] == '"' {
-            let mut builder = "".to_owned();
+            let mut builder = String::from("");
             loop {
                 *i += 1;
                 let c = code[*i];
@@ -380,12 +378,12 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             skip_whitespaces(i);
             let id = match parse_ident(i) {
                 Some(id) => id,
-                None => break Token::Err("no id after let # ".to_owned()),
+                None => break Token::Err(String::from("no id after let # ")),
             };
             skip_whitespaces(i);
 
             if code[*i] != '=' {
-                break Token::Err("no equal after let 'id' # ".to_owned());
+                break Token::Err(String::from("no equal after let 'id' # "));
             }
             *i += 1;
 
@@ -395,7 +393,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             //let i_backup = *i;
             *i += 1;
 
-            let mut idents = vec![];
+            let mut idents = Vec::new();
             loop {
                 skip_whitespaces(i);
                 match parse_ident(i) {
@@ -408,13 +406,13 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             skip_whitespaces(i);
 
             if code[*i] != ')' {
-                break Token::Err("no end parenthesis after args".to_owned());
+                break Token::Err(String::from("no end parenthesis after args"));
             }
             *i += 1;
             skip_whitespaces(i);
 
             if code[*i] != '=' || code[*i + 1] != '>' {
-                break Token::Err("no => after args".to_owned());
+                break Token::Err(String::from("no => after args"));
             }
             *i += 2;
 
@@ -427,7 +425,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
 
         if let Some(id) = parse_ident(i) {
             skip_whitespaces(i);
-            if code[*i] == '(' {
+            if *i < code.len() && code[*i] == '(' {
                 *i += 1;
                 break Token::FuncCallStart(id);
             }
@@ -483,7 +481,7 @@ fn pa(i: usize) -> String {
 type Error = &'static str;
 pub fn parse_ast(code: &[char]) -> Result<AST, Error> {
     let mut i = 0;
-    let mut ast = vec![];
+    let mut ast = Vec::new();
     parse_expr(&mut ast, &mut i, code, 0).map(|_| ast)
 }
 
@@ -533,7 +531,7 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
     info!("{}p{:?}", pa(pad), token);
     if let Token::BlockStart = token {
         let block_ni = ast.len();
-        ast.push(N::Block(vec![]));
+        ast.push(N::Block(Vec::new()));
 
         loop {
             let mut j = *i;
@@ -558,7 +556,8 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
 
     if let Token::FuncDefStart { args } = token {
         let scope = parse_expr(ast, i, code, pad + 1)?;
-        let n = N::FuncDef {
+
+        let mut n = N::FuncDef {
             args_name: args,
             scope: vec![scope],
         };
@@ -639,7 +638,7 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
 
         let n = N::FuncCall {
             func: get_ni,
-            args: vec![],
+            args: Vec::new(),
         };
         let expr_ni: usize = ast.len();
         ast.push(n);
