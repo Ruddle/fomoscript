@@ -106,3 +106,7 @@ let _ = eval(&0, &mut ctx);
 - Javascript-like objects (we just have Number and String 😱)
 - Read-Eval-Print Loop
 - Error handling (now it just UB if something goes wrong)
+- Escape characters in quoted strings
+- Operator precedence
+
+Also the inner workings are not very rust-like, no unsafe though ;)

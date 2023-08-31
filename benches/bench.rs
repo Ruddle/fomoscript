@@ -18,6 +18,16 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
+    c.bench_function("counter_native", |b| {
+        b.iter(|| {
+            let mut x = 0;
+            while x < 1000 {
+                x = black_box(x) + 1
+            }
+            x
+        })
+    });
+
     let code: Vec<char> = r#"{
         let x = 0
         while x<1000 {

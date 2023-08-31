@@ -1,16 +1,11 @@
 #![no_std]
 use log::info;
-
 extern crate alloc;
-use alloc::borrow::ToOwned;
-use alloc::collections::BTreeMap;
-use alloc::format;
-use alloc::string::String;
-use alloc::string::ToString;
-use alloc::vec;
-use alloc::vec::Vec;
-use core::ops::Rem;
-use core::result::Result;
+use alloc::string::{String, ToString};
+use alloc::{borrow::ToOwned, collections::BTreeMap, vec::Vec};
+use alloc::{format, vec};
+use core::{ops::Rem, result::Result};
+
 /// An index to an AST node
 pub type NI = usize;
 
@@ -214,49 +209,30 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
             Some((_, n)) => n,
             _ => N::Unit,
         },
-        N::FuncCall { func, args } => {
-            //
-            match eval(&func, ctx) {
-                N::FuncNativeDef(native) => {
-                    let func = native.0;
-
-                    match args.len() {
-                        0 => func(N::Unit, N::Unit, N::Unit, N::Unit),
-                        1 => func(eval(&args[0], ctx), N::Unit, N::Unit, N::Unit),
-                        2 => func(eval(&args[0], ctx), eval(&args[1], ctx), N::Unit, N::Unit),
-                        3 => func(
-                            eval(&args[0], ctx),
-                            eval(&args[1], ctx),
-                            eval(&args[2], ctx),
-                            N::Unit,
-                        ),
-                        _ => func(
-                            eval(&args[0], ctx),
-                            eval(&args[1], ctx),
-                            eval(&args[2], ctx),
-                            eval(&args[3], ctx),
-                        ),
-                    }
-                }
-                N::FuncDef { args_name, scope } => {
-                    for (i, arg) in args.iter().enumerate() {
-                        let val = eval(arg, ctx);
-                        info!("fun call arg{}: {:?}", i, val);
-                        ctx.path.push('_');
-                        ctx.set_var_scoped(&args_name[i], val);
-                        ctx.path.pop();
-                    }
+        N::FuncCall { func, args } => match eval(&func, ctx) {
+            N::FuncNativeDef(native) => native.0(
+                args.get(0).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
+                args.get(1).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
+                args.get(2).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
+                args.get(3).map(|e| eval(&e, ctx)).unwrap_or(N::Unit),
+            ),
+            N::FuncDef { args_name, scope } => {
+                for (i, arg) in args.iter().enumerate() {
+                    let val = eval(arg, ctx);
                     ctx.path.push('_');
-                    let mut res = N::Unit;
-                    for a in scope.iter() {
-                        res = eval(a, ctx);
-                    }
+                    ctx.set_var_scoped(&args_name[i], val);
                     ctx.path.pop();
-                    res
                 }
-                _ => N::Unit,
+                ctx.path.push('_');
+                let mut res = N::Unit;
+                for a in scope.iter() {
+                    res = eval(a, ctx);
+                }
+                ctx.path.pop();
+                res
             }
-        }
+            _ => N::Unit,
+        },
 
         N::Binary { op, l, r } => {
             if let BinaryOp::Assign = op {
@@ -303,7 +279,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
 }
 
 pub fn next_token(i: &mut usize, code: &[char]) -> Token {
-    let skip_whitespace = |i: &mut usize| {
+    let skip_whitespaces = |i: &mut usize| {
         while *i < code.len() && (code[*i] == ' ' || code[*i] == '\n') {
             *i += 1;
         }
@@ -346,180 +322,140 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             None
         }
     };
+
+    let starts_with = |mut i: usize, e: &str| {
+        if i + e.len() > code.len() {
+            return false;
+        }
+        for c in e.chars() {
+            if code[i] != c {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    };
     loop {
-        skip_whitespace(i);
+        skip_whitespaces(i);
         if *i >= code.len() {
             break Token::Err("i>code".to_owned());
         }
-        let c = code[*i];
 
-        {
-            if c == '{' {
+        if code[*i] == '"' {
+            let mut builder = "".to_owned();
+            loop {
                 *i += 1;
-                break Token::BlockStart;
-            }
-            if let '}' = c {
-                *i += 1;
-                break Token::BlockEnd;
-            }
-
-            if c == '"' {
-                let mut builder = "".to_owned();
-                loop {
+                let c = code[*i];
+                if c != '"' {
+                    builder.push(c);
+                } else {
                     *i += 1;
-                    let c = code[*i];
-                    if c != '"' {
-                        builder.push(c);
-                    } else {
-                        *i += 1;
-                        return Token::Quoted(builder);
-                    }
+                    return Token::Quoted(builder);
                 }
             }
-
-            if c == 'i' && *i + 2 < code.len() && code[*i + 1] == 'f' {
-                let c2 = code[*i + 2];
-                if c2 == ' ' || c2 == '{' {
-                    *i += 2;
-                    break Token::If;
-                }
+        }
+        if starts_with(*i, "if") && *i + 2 < code.len() {
+            let c2 = code[*i + 2];
+            if c2 == ' ' || c2 == '{' {
+                *i += 2;
+                break Token::If;
             }
-            if c == 'e'
-                && *i + 4 < code.len()
-                && code[*i + 1] == 'l'
-                && code[*i + 2] == 's'
-                && code[*i + 3] == 'e'
-            {
-                let c2 = code[*i + 4];
-                if c2 == ' ' || c2 == '{' {
-                    *i += 4;
-                    break Token::Else;
-                }
-            }
-
-            if c == 'w'
-                && *i + 5 < code.len()
-                && code[*i + 1] == 'h'
-                && code[*i + 2] == 'i'
-                && code[*i + 3] == 'l'
-                && code[*i + 4] == 'e'
-            {
-                let c2 = code[*i + 5];
-                if c2 == ' ' || c2 == '{' {
-                    *i += 5;
-                    break Token::While;
-                }
-            }
-
-            if c == 'l'
-                && *i + 3 < code.len()
-                && code[*i + 1] == 'e'
-                && code[*i + 2] == 't'
-                && code[*i + 3] == ' '
-            {
+        }
+        if starts_with(*i, "else") && *i + 4 < code.len() {
+            let c2 = code[*i + 4];
+            if c2 == ' ' || c2 == '{' {
                 *i += 4;
-                skip_whitespace(i);
-                let id = match parse_ident(i) {
-                    Some(id) => id,
-                    None => break Token::Err("no id after let # ".to_owned()),
+                break Token::Else;
+            }
+        }
+        if starts_with(*i, "while") && *i + 5 < code.len() {
+            let c2 = code[*i + 5];
+            if c2 == ' ' || c2 == '{' {
+                *i += 5;
+                break Token::While;
+            }
+        }
+        if starts_with(*i, "let ") && *i + 4 < code.len() {
+            *i += 4;
+            skip_whitespaces(i);
+            let id = match parse_ident(i) {
+                Some(id) => id,
+                None => break Token::Err("no id after let # ".to_owned()),
+            };
+            skip_whitespaces(i);
+
+            if code[*i] != '=' {
+                break Token::Err("no equal after let 'id' # ".to_owned());
+            }
+            *i += 1;
+
+            break Token::Let(id);
+        }
+        if code[*i] == '(' {
+            //let i_backup = *i;
+            *i += 1;
+
+            let mut idents = vec![];
+            loop {
+                skip_whitespaces(i);
+                match parse_ident(i) {
+                    Some(id) => idents.push(id),
+                    None => break,
                 };
-                skip_whitespace(i);
-
-                if code[*i] != '=' {
-                    break Token::Err("no equal after let 'id' # ".to_owned());
-                }
-                *i += 1;
-
-                break Token::Let(id);
+                skip_comma(i);
             }
 
-            if c == '(' {
-                //let i_backup = *i;
-                *i += 1;
+            skip_whitespaces(i);
 
-                let mut idents = vec![];
-                loop {
-                    skip_whitespace(i);
-                    match parse_ident(i) {
-                        Some(id) => idents.push(id),
-                        None => break,
-                    };
-                    skip_comma(i);
-                }
+            if code[*i] != ')' {
+                break Token::Err("no end parenthesis after args".to_owned());
+            }
+            *i += 1;
+            skip_whitespaces(i);
 
-                skip_whitespace(i);
+            if code[*i] != '=' || code[*i + 1] != '>' {
+                break Token::Err("no => after args".to_owned());
+            }
+            *i += 2;
 
-                if code[*i] != ')' {
-                    break Token::Err("no end parenthesis after args".to_owned());
-                }
-                *i += 1;
-                skip_whitespace(i);
+            break Token::FuncDefStart { args: idents };
+        }
 
-                if code[*i] != '=' || code[*i + 1] != '>' {
-                    break Token::Err("no => after args".to_owned());
-                }
-                *i += 2;
+        if let Some(num) = parse_number(i) {
+            break Token::N(N::Num(num));
+        }
 
-                break Token::FuncDefStart { args: idents };
+        if let Some(id) = parse_ident(i) {
+            skip_whitespaces(i);
+            if code[*i] == '(' {
+                *i += 1;
+                break Token::FuncCallStart(id);
             }
+            break Token::N(N::Get { name: id });
+        }
 
-            if let Some(num) = parse_number(i) {
-                break Token::N(N::Num(num));
-            }
-
-            if let Some(id) = parse_ident(i) {
-                skip_whitespace(i);
-                if code[*i] == '(' {
-                    *i += 1;
-                    break Token::FuncCallStart(id);
-                }
-
-                break Token::N(N::Get { name: id });
-            }
-            if c == ',' {
+        for (key, val) in [
+            (',', Token::Comma),
+            (')', Token::ParEnd),
+            ('{', Token::BlockStart),
+            ('}', Token::BlockEnd),
+            ('+', Token::Bin(BinaryOp::Plus)),
+            ('-', Token::Bin(BinaryOp::Minus)),
+            ('*', Token::Bin(BinaryOp::Mul)),
+            ('/', Token::Bin(BinaryOp::Div)),
+            ('=', Token::Bin(BinaryOp::Assign)),
+            ('>', Token::Bin(BinaryOp::Greater)),
+            ('<', Token::Bin(BinaryOp::Lesser)),
+            ('%', Token::Bin(BinaryOp::Modulus)),
+        ] {
+            if code[*i] == key {
                 *i += 1;
-                break Token::Comma;
+                return val;
             }
-            if c == ')' {
-                *i += 1;
-                break Token::ParEnd;
-            }
-            if c == '+' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Plus);
-            }
-            if c == '-' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Minus);
-            }
-            if c == '*' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Mul);
-            }
-            if c == '/' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Div);
-            }
-            if c == '=' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Assign);
-            }
-            if c == '>' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Greater);
-            }
-            if c == '<' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Lesser);
-            }
-            if c == '%' {
-                *i += 1;
-                break Token::Bin(BinaryOp::Modulus);
-            }
-            if c == '=' && *i + 1 < code.len() && code[*i + 1] == '=' {
-                *i += 2;
-                break Token::Bin(BinaryOp::Equals);
-            }
+        }
+        if code[*i] == '=' && *i + 1 < code.len() && code[*i + 1] == '=' {
+            *i += 2;
+            break Token::Bin(BinaryOp::Equals);
         }
 
         *i += 1;

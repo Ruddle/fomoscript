@@ -35,6 +35,46 @@ fn flow_while_0() {
 }
 
 #[test]
+fn flow_if_no_else_0() {
+    let code: Vec<char> = r#"{
+        let x = 0
+        if x<5 {
+            x = 6
+            x
+        }
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 6.0)
+    } else {
+        assert!(false)
+    }
+}
+#[test]
+fn flow_if_no_else_1() {
+    let code: Vec<char> = r#"{
+        let x = 0
+        if x>5 {
+            x = 6
+            x
+        }
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Unit = res {
+        assert!(true)
+    } else {
+        assert!(false)
+    }
+}
+#[test]
 fn string_concat() {
     let code: Vec<char> = r#"{"hello" +" "+"world"}"#.chars().collect();
     let ast = parse_ast(&code).expect("parse ok");
