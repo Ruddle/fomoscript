@@ -11,6 +11,8 @@ pub type NI = usize;
 /// Nodes are stored in a Vec, and reference other nodes with their index.
 pub type AST = Vec<N>;
 
+pub type Identifier = String;
+
 /// fomoscript AST node
 #[derive(Debug, Clone)]
 pub enum N {
@@ -28,13 +30,8 @@ pub enum N {
         condition: NI,
         body: NI,
     },
-    Set {
-        name: String,
-        val: NI,
-    },
-    Get {
-        name: String,
-    },
+    Set(Identifier, NI),
+    Get(Identifier),
     Binary {
         op: BinOp,
         l: NI,
@@ -42,7 +39,7 @@ pub enum N {
     },
     //Terminal nodes, the following nodes can be output by eval
     FuncDef {
-        args_name: Vec<String>,
+        args_name: Vec<Identifier>,
         scope: NI,
     },
     FuncNativeDef(Native),
@@ -125,10 +122,10 @@ pub enum Token {
     Quoted(String),
     Bin(BinOp),
     N(N),
-    Let(String),
+    Let(Identifier),
     Err(String),
-    FuncCallStart(String),
-    FuncDefStart { args: Vec<String> },
+    FuncDefStart { args: Vec<Identifier> },
+    Assoc,
 }
 
 /// Interpreter context, holds all state during execution.
@@ -210,12 +207,12 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
             ctx.path.pop();
             res
         }
-        N::Set { name, val } => {
+        N::Set(name, val) => {
             let val = eval(&val, ctx);
             ctx.set_var_scoped(&name, val);
             N::Unit
         }
-        N::Get { name } => ctx.find_var(&name).map(|e| e.1).unwrap_or(N::Unit),
+        N::Get(name) => ctx.find_var(&name).map(|e| e.1).unwrap_or(N::Unit),
         N::FuncCall { func, args } => match eval(&func, ctx) {
             N::FuncNativeDef(native) => native.0(
                 args.first().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
@@ -241,7 +238,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
         N::Binary { op, l, r } => {
             if let BinOp::Assign = op {
                 let n = ctx.get_n(l);
-                if let N::Get { name } = n {
+                if let N::Get(name) = n {
                     if let Some((key, _)) = ctx.find_var(&name) {
                         let v = eval(&r, ctx);
                         ctx.set_var_absolute(&key, v);
@@ -273,18 +270,13 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
                 }
             }
         }
-        e => e.clone(),
+        e => e,
     }
 }
 
 pub fn next_token(i: &mut usize, code: &[char]) -> Token {
     let skip_whitespaces = |i: &mut usize| {
         while *i < code.len() && (code[*i] == ' ' || code[*i] == '\n') {
-            *i += 1;
-        }
-    };
-    let skip_comma = |i: &mut usize| {
-        if *i < code.len() && code[*i] == ',' {
             *i += 1;
         }
     };
@@ -393,68 +385,37 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
 
             break Token::Let(id);
         }
-        if code[*i] == '(' {
-            //let i_backup = *i;
-            *i += 1;
-            if *i >= code.len() {
-                return Token::Err(String::from("i>code"));
-            }
-            let mut idents = Vec::new();
-            loop {
-                skip_whitespaces(i);
-                match parse_ident(i) {
-                    Some(id) => idents.push(id),
-                    None => break,
-                };
-                skip_comma(i);
-            }
-
-            skip_whitespaces(i);
-
-            if *i >= code.len() || code[*i] != ')' {
-                break Token::Err(String::from("no end parenthesis after args"));
-            }
-            *i += 1;
-            skip_whitespaces(i);
-
-            if *i + 1 >= code.len() || code[*i] != '=' || code[*i + 1] != '>' {
-                break Token::Err(String::from("no => after args"));
-            }
-            *i += 2;
-
-            break Token::FuncDefStart { args: idents };
-        }
 
         if let Some(num) = parse_number(i) {
             break Token::N(N::Num(num));
         }
 
         if let Some(id) = parse_ident(i) {
-            skip_whitespaces(i);
-            if *i < code.len() && code[*i] == '(' {
-                *i += 1;
-                break Token::FuncCallStart(id);
+            break Token::N(N::Get(id));
+        }
+
+        for (st, tok) in [
+            ("==", Token::Bin(BinOp::Equals)),
+            ("!=", Token::Bin(BinOp::NotEquals)),
+            ("=>", Token::Assoc),
+        ] {
+            if starts_with(*i, st) {
+                *i += 2;
+                return tok;
             }
-            break Token::N(N::Get { name: id });
         }
-        if starts_with(*i, "==") {
-            *i += 2;
-            break Token::Bin(BinOp::Equals);
-        }
-        if starts_with(*i, "!=") {
-            *i += 2;
-            break Token::Bin(BinOp::NotEquals);
-        }
+
         for (key, val) in [
-            (',', Token::Comma),
-            (')', Token::ParEnd),
             ('{', Token::BlockStart),
             ('}', Token::BlockEnd),
+            (',', Token::Comma),
+            ('(', Token::ParStart),
+            (')', Token::ParEnd),
+            ('=', Token::Bin(BinOp::Assign)),
             ('+', Token::Bin(BinOp::Plus)),
             ('-', Token::Bin(BinOp::Minus)),
             ('*', Token::Bin(BinOp::Mul)),
             ('/', Token::Bin(BinOp::Div)),
-            ('=', Token::Bin(BinOp::Assign)),
             ('>', Token::Bin(BinOp::Greater)),
             ('<', Token::Bin(BinOp::Lesser)),
             ('%', Token::Bin(BinOp::Modulus)),
@@ -494,10 +455,6 @@ pub fn parse_ast(code: &[char]) -> Result<AST, Error> {
 }
 
 pub fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
-    if *i >= code.len() {
-        return Err("EOF");
-    }
-
     info!(
         "{}parse expr {:?}",
         pa(pad),
@@ -527,10 +484,6 @@ pub fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
 }
 
 pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
-    if *i >= code.len() {
-        return Err("EOF");
-    }
-
     info!(
         "{}parse_term {:?}",
         pa(pad),
@@ -540,12 +493,13 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
     let factor = parse_factor(ast, i, code, pad + 1)?;
     let mut j = *i;
     let token = next_token(&mut j, code);
+    info!("{:?}", token);
     match token {
         Token::Bin(BinOp::Mul) | Token::Bin(BinOp::Div) | Token::ParStart => {
             *i = j;
-            let factor_right = parse_factor(ast, i, code, pad + 1)?;
             match token {
                 Token::Bin(op) => {
+                    let factor_right = parse_term(ast, i, code, pad + 1)?;
                     let n = N::Binary {
                         op,
                         l: factor,
@@ -556,11 +510,45 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
                     return Ok(block_ni);
                 }
 
-                Token::ParStart => {}
+                Token::ParStart => {
+                    info!("Function call start");
+                    let n = N::FuncCall {
+                        func: factor,
+                        args: Vec::new(),
+                    };
+                    let ni: usize = ast.len();
+                    ast.push(n);
+                    loop {
+                        info!("args enum");
+                        let mut j = *i;
+                        let e = parse_expr(ast, &mut j, code, pad + 1);
+                        match e {
+                            Ok(expr) => {
+                                info!("args enum got");
+                                *i = j;
+                                insert_in_parent(ast, ni, expr);
+                                let mut k = *i;
+                                let token = next_token(&mut k, code);
+                                if let Token::Comma = token {
+                                    *i = k
+                                }
+                            }
+                            Err(_) => {
+                                info!("args enum end");
+                                break;
+                            }
+                        }
+                    }
+                    let token = next_token(i, code);
+                    if let Token::ParEnd = token {
+                        return Ok(ni);
+                    } else {
+                        return Err("No parenthesis close");
+                    }
+                }
                 _ => {}
             }
         }
-
         _ => {}
     }
 
@@ -605,16 +593,35 @@ pub fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> 
         }
     }
 
-    if let Token::FuncDefStart { args } = token {
-        let scope = parse_expr(ast, i, code, pad + 1)?;
+    if let Token::ParStart = token {
+        info!("Function definition start");
+        let mut args_name = Vec::new();
 
-        let n = N::FuncDef {
-            args_name: args,
-            scope,
-        };
-        let block_ni: usize = ast.len();
-        ast.push(n);
-        return Ok(block_ni);
+        loop {
+            let token = next_token(i, code);
+            match token {
+                Token::N(N::Get(name)) => {
+                    info!("name {}", name);
+                    args_name.push(name);
+                }
+                Token::Comma => {}
+                Token::ParEnd => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        let token = next_token(i, code);
+        if let Token::Assoc = token {
+            let scope = parse_expr(ast, i, code, pad + 1)?;
+            let n = N::FuncDef { args_name, scope };
+            let ni: usize = ast.len();
+            ast.push(n);
+            return Ok(ni);
+        } else {
+            return Err("No => after func def");
+        }
     }
 
     if let Token::Quoted(s) = token {
@@ -659,7 +666,7 @@ pub fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> 
 
     if let Token::Let(name) = token {
         let val = parse_expr(ast, i, code, pad + 1)?;
-        let n = N::Set { name, val };
+        let n = N::Set(name, val);
         let set_expr_ni: usize = ast.len();
         ast.push(n);
         return Ok(set_expr_ni);
@@ -672,51 +679,11 @@ pub fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> 
         return Ok(expr_ni);
     }
 
-    if let Token::N(N::Get { name }) = token {
-        let n = N::Get { name };
+    if let Token::N(N::Get(name)) = token {
+        let n = N::Get(name);
         let expr_ni: usize = ast.len();
         ast.push(n);
         return Ok(expr_ni);
-    }
-
-    if let Token::FuncCallStart(name) = token {
-        let get_ni = {
-            let get = N::Get { name };
-            let expr_ni: usize = ast.len();
-            ast.push(get);
-            expr_ni
-        };
-
-        let n = N::FuncCall {
-            func: get_ni,
-            args: Vec::new(),
-        };
-        let expr_ni: usize = ast.len();
-        ast.push(n);
-        loop {
-            let mut j = *i;
-            let e = parse_expr(ast, &mut j, code, pad + 1);
-            match e {
-                Ok(expr) => {
-                    *i = j;
-                    insert_in_parent(ast, expr_ni, expr);
-                    let mut k = *i;
-                    let token = next_token(&mut k, code);
-                    if let Token::Comma = token {
-                        *i = k
-                    }
-                }
-                Err(_) => {
-                    break;
-                }
-            }
-        }
-        let token = next_token(i, code);
-        if let Token::ParEnd = token {
-            return Ok(expr_ni);
-        } else {
-            return Err("No parenthesis close");
-        }
     }
 
     Err("No term found")

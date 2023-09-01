@@ -121,6 +121,7 @@ Should be panic free during eval. Don't trust the parser just yet.
 - [x] Higher order function
 - [x] Control flow if/else/while
 - [x] Custom native function
+- [x] Anonymous function call
 
 # Performance
 
@@ -133,6 +134,9 @@ Evaluation is slow, but reasonable for scripting:
 
 See for yourself with `cargo bench`
 
+Unstructured number crunching will stay slow.
+Typed arrays (like in js) could be added in the future for fast structured operation.
+
 # Fun facts
 
 Everything is an expression. For instance if/else acts as a ternary operator.
@@ -141,14 +145,21 @@ Everything is an expression. For instance if/else acts as a ternary operator.
 
 now x is 99
 
-When there is a doubt, the interpreter default to `N::Unit`. For instance let's not put an else branch:
+When there is a doubt, the interpreter defaults to `N::Unit`. For instance let's not put an else branch:
 
 `let x=  if 0 1`
 
 x is now `N::Unit`
 
 No parenthesis needed for the `if` condition or body, the previous expression is equivalent to:
-`let x=  if 0 {1} else {N::Unit}`
+
+```rust
+let x = if 0 {
+    1
+} else {
+    N::Unit
+}
+```
 
 Same goes for while, it returns `N::Unit` if it never runs the body, or the last body expression if it runs at least once.
 
@@ -166,14 +177,7 @@ let x = {
 
 There is no parenthesis, use brackets to force factorization and precedence.
 
-`\n` is just a whitespace like space. It doesn't separate statements more than space, like most languages.
-
-No boolean. If you want true and false, just prepend to your script:
-
-```rust
-let true = 1
-let false = 0
-```
+`\n` is just a whitespace like space. It doesn't separate statements more than space, unlike most languages.
 
 Boolean operation automatically cast operand to bool (lookup `to_bool` to see how)
 

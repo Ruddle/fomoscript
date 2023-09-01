@@ -465,19 +465,38 @@ fn op_boolean_6() {
     }
 }
 
-// #[test]
-// fn anonymous_func() {
-//     let code: Vec<char> = r#"{
-//         {(a,b,c)=> a+b+c}(1,2,3)
-//         }"#
-//     .chars()
-//     .collect();
-//     let ast = parse_ast(&code).expect("parse ok");
-//     let mut ctx = Ctx::new(ast);
-//     let res = eval(&0, &mut ctx);
-//     if let N::Num(x) = res {
-//         assert_eq!(x, 6.0)
-//     } else {
-//         assert!(false)
-//     }
-// }
+#[test]
+fn func_returns_func() {
+    let code: Vec<char> = r#"{
+        let f = (e) => {(a)=> a+e}
+        let g = f(1)
+        g(2)
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 3.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn anonymous_func() {
+    let code: Vec<char> = r#"{
+        {(a,b,c)=> a+b+c}(1,2,3)
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 6.0)
+    } else {
+        assert!(false)
+    }
+}
