@@ -152,3 +152,62 @@ fn big_function() {
         assert!(false)
     }
 }
+
+#[test]
+fn smol_function() {
+    let code: Vec<char> = r#"{
+        let f = (a) => 1+a
+        f(10)
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 11.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_equals() {
+    let code: Vec<char> = r#"{
+        let x = 0
+        if x==0{
+            x =x+1
+        }
+        x
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 1.0)
+    } else {
+        assert!(false)
+    }
+}
+#[test]
+fn op_greater() {
+    let code: Vec<char> = r#"{
+        let x = 0
+        if 1>x{
+            x =x+1
+        }
+        x
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 1.0)
+    } else {
+        assert!(false)
+    }
+}

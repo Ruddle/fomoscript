@@ -70,6 +70,7 @@ pub enum BinaryOp {
     Lesser,
     Greater,
     Equals,
+    NotEquals,
     Modulus,
 }
 
@@ -255,6 +256,12 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
                     (BinaryOp::Equals, N::Str(li), N::Str(ri)) => {
                         N::Num(if li == ri { 1.0 } else { 0.0 })
                     }
+                    (BinaryOp::NotEquals, N::Num(li), N::Num(ri)) => {
+                        N::Num(if li != ri { 1.0 } else { 0.0 })
+                    }
+                    (BinaryOp::NotEquals, N::Str(li), N::Str(ri)) => {
+                        N::Num(if li != ri { 1.0 } else { 0.0 })
+                    }
                     (BinaryOp::Minus, N::Num(li), N::Num(ri)) => N::Num(li - ri),
                     (BinaryOp::Mul, N::Num(li), N::Num(ri)) => N::Num(li * ri),
                     (BinaryOp::Div, N::Num(li), N::Num(ri)) => N::Num(li / ri),
@@ -427,7 +434,14 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             }
             break Token::N(N::Get { name: id });
         }
-
+        if starts_with(*i, "==") {
+            *i += 2;
+            break Token::Bin(BinaryOp::Equals);
+        }
+        if starts_with(*i, "!=") {
+            *i += 2;
+            break Token::Bin(BinaryOp::NotEquals);
+        }
         for (key, val) in [
             (',', Token::Comma),
             (')', Token::ParEnd),
@@ -446,10 +460,6 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
                 *i += 1;
                 return val;
             }
-        }
-        if code[*i] == '=' && *i + 1 < code.len() && code[*i + 1] == '=' {
-            *i += 2;
-            break Token::Bin(BinaryOp::Equals);
         }
 
         *i += 1;
