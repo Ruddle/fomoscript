@@ -3,9 +3,7 @@ use super::*;
 #[test]
 fn binary_opt() {
     let code: Vec<char> = r#"{1+1}"#.chars().collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 2.0)
     } else {
@@ -24,9 +22,7 @@ fn flow_while_0() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 5.0)
     } else {
@@ -45,9 +41,7 @@ fn flow_if_no_else_0() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
     } else {
@@ -65,9 +59,7 @@ fn flow_if_no_else_1() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Unit = res {
         assert!(true)
     } else {
@@ -87,9 +79,7 @@ fn flow_if_else_0() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 10.0)
     } else {
@@ -109,9 +99,7 @@ fn flow_if_else_1() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
     } else {
@@ -128,9 +116,7 @@ fn flow_if_else_mini() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 10.0)
     } else {
@@ -141,9 +127,7 @@ fn flow_if_else_mini() {
 #[test]
 fn string_concat() {
     let code: Vec<char> = r#"{"hello" +" "+"world"}"#.chars().collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Str(x) = res {
         assert_eq!(x, String::from("hello world"))
     } else {
@@ -161,9 +145,7 @@ fn higher_order_func() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -185,9 +167,7 @@ fn scope() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 3.0)
     } else {
@@ -207,9 +187,7 @@ fn big_function() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1003.0)
     } else {
@@ -225,9 +203,7 @@ fn smol_function() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 11.0)
     } else {
@@ -246,9 +222,7 @@ fn op_equals() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -266,9 +240,7 @@ fn op_greater() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -284,9 +256,7 @@ fn missing_args() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Unit = res {
         assert!(true)
     } else {
@@ -302,9 +272,7 @@ fn over_args() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
     } else {
@@ -319,9 +287,7 @@ fn op_precedence_0() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 14.0)
     } else {
@@ -336,9 +302,7 @@ fn op_precedence_1() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 14.0)
     } else {
@@ -353,9 +317,7 @@ fn op_boolean_0() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 0.0)
     } else {
@@ -366,13 +328,11 @@ fn op_boolean_0() {
 #[test]
 fn op_boolean_1() {
     let code: Vec<char> = r#"{
-        1&0
+        1&parent
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 0.0)
     } else {
@@ -387,9 +347,7 @@ fn op_boolean_2() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -404,9 +362,7 @@ fn op_boolean_3() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -421,9 +377,7 @@ fn op_boolean_4() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -438,9 +392,7 @@ fn op_boolean_5() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -455,9 +407,7 @@ fn op_boolean_6() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 0.0)
     } else {
@@ -474,9 +424,7 @@ fn func_returns_func() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 3.0)
     } else {
@@ -491,11 +439,23 @@ fn anonymous_func() {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
-    let mut ctx = Ctx::new(ast);
-    let res = eval(&0, &mut ctx);
+    let res = parse_eval(&code).unwrap();
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn multiple_expr() {
+    let code: Vec<char> = r#"let x = 5
+    x+2"#
+        .chars()
+        .collect();
+    let res = parse_eval(&code).unwrap();
+    if let N::Num(x) = res {
+        assert_eq!(x, 7.0)
     } else {
         assert!(false)
     }

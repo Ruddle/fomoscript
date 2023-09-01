@@ -69,7 +69,7 @@ let mut ctx = Ctx::new(ast);
 let result = eval(&0, &mut ctx);
 ```
 
-The result will have [this type](/src/lib.rs#L52).
+The result will have [this type](/src/lib.rs#L36).
 
 Go see the [tests](/src/test.rs) for more examples.
 

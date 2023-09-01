@@ -32,11 +32,7 @@ pub enum N {
     },
     Set(Identifier, NI),
     Get(Identifier),
-    Binary {
-        op: BinOp,
-        l: NI,
-        r: NI,
-    },
+    Binary(BinOp, NI, NI),
     //Terminal nodes, the following nodes can be output by eval
     FuncDef {
         args_name: Vec<Identifier>,
@@ -235,7 +231,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
             _ => N::Unit,
         },
 
-        N::Binary { op, l, r } => {
+        N::Binary(op, l, r) => {
             if let BinOp::Assign = op {
                 let n = ctx.get_n(l);
                 if let N::Get(name) = n {
@@ -265,7 +261,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
                 (BinOp::Plus, N::Str(li), ri) => N::Str(format!("{}{}", li, ri.to_str())),
                 (BinOp::Plus, li, N::Str(ri)) => N::Str(format!("{}{}", li.to_str(), ri)),
                 _ => {
-                    info!("ERROR: bin {:?} {:?}", lt, rt);
+                    info!("unknown bin  {:?} {:?}", lt, rt);
                     N::Unit
                 }
             }
@@ -334,19 +330,17 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
 
         if code[*i] == '"' {
             let mut builder = String::from("");
-            loop {
+            while *i + 1 < code.len() {
                 *i += 1;
-                if *i >= code.len() {
-                    return Token::Err(String::from("i>code"));
-                }
-                let c = code[*i];
-                if c != '"' {
-                    builder.push(c);
-                } else {
-                    *i += 1;
-                    return Token::Quoted(builder);
+                match code[*i] {
+                    '"' => {
+                        *i += 1;
+                        return Token::Quoted(builder);
+                    }
+                    c => builder.push(c),
                 }
             }
+            return Token::Err(String::from("i>code"));
         }
         if starts_with(*i, "if") && *i + 2 < code.len() {
             let c2 = code[*i + 2];
@@ -448,10 +442,17 @@ fn pa(i: usize) -> String {
     format!("{:width$}", "", width = i * 3)
 }
 type Error = &'static str;
-pub fn parse_ast(code: &[char]) -> Result<AST, Error> {
+
+pub fn parse_eval(code: &[char]) -> Result<N, Error> {
+    let (ast, parent) = parse_ast(code)?;
+    let mut ctx = Ctx::new(ast);
+    Ok(eval(&parent, &mut ctx))
+}
+
+pub fn parse_ast(code: &[char]) -> Result<(AST, NI), Error> {
     let mut i = 0;
     let mut ast = Vec::new();
-    parse_expr(&mut ast, &mut i, code, 0).map(|_| ast)
+    parse_expr(&mut ast, &mut i, code, 0).map(|ni| (ast, ni))
 }
 
 pub fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
@@ -469,11 +470,7 @@ pub fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
         if op.clone().term_separate() {
             *i = j;
             let term_right = parse_expr(ast, i, code, pad + 1)?;
-            let n = N::Binary {
-                op,
-                l: term,
-                r: term_right,
-            };
+            let n = N::Binary(op, term, term_right);
             let block_ni = ast.len();
             ast.push(n);
             return Ok(block_ni);
@@ -500,11 +497,7 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
             match token {
                 Token::Bin(op) => {
                     let factor_right = parse_term(ast, i, code, pad + 1)?;
-                    let n = N::Binary {
-                        op,
-                        l: factor,
-                        r: factor_right,
-                    };
+                    let n = N::Binary(op, factor, factor_right);
                     let block_ni = ast.len();
                     ast.push(n);
                     return Ok(block_ni);

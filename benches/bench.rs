@@ -10,11 +10,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
+    let (ast, parent) = parse_ast(&code).expect("parse ok");
     c.bench_function("counter", |b| {
         b.iter(|| {
             let mut ctx = Ctx::new(ast.clone());
-            black_box(eval(&0, &mut ctx));
+            black_box(eval(&parent, &mut ctx));
         })
     });
 
@@ -41,11 +41,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         }"#
     .chars()
     .collect();
-    let ast = parse_ast(&code).expect("parse ok");
+    let (ast, parent) = parse_ast(&code).expect("parse ok");
     c.bench_function("counter_deep", |b| {
         b.iter(|| {
             let mut ctx = Ctx::new(ast.clone());
-            black_box(eval(&0, &mut ctx));
+            black_box(eval(&parent, &mut ctx));
         })
     });
 
