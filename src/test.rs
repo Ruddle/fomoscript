@@ -311,3 +311,173 @@ fn over_args() {
         assert!(false)
     }
 }
+
+#[test]
+fn op_precedence_0() {
+    let code: Vec<char> = r#"{
+        2+3*4
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 14.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_precedence_1() {
+    let code: Vec<char> = r#"{
+        3*4+2
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 14.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_boolean_0() {
+    let code: Vec<char> = r#"{
+        0&1
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 0.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_boolean_1() {
+    let code: Vec<char> = r#"{
+        1&0
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 0.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_boolean_2() {
+    let code: Vec<char> = r#"{
+        1&1
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 1.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_boolean_3() {
+    let code: Vec<char> = r#"{
+        0|1
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 1.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_boolean_4() {
+    let code: Vec<char> = r#"{
+        1|0
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 1.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_boolean_5() {
+    let code: Vec<char> = r#"{
+        1|1
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 1.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn op_boolean_6() {
+    let code: Vec<char> = r#"{
+        0|0
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 0.0)
+    } else {
+        assert!(false)
+    }
+}
+
+// #[test]
+// fn anonymous_func() {
+//     let code: Vec<char> = r#"{
+//         {(a,b,c)=> a+b+c}(1,2,3)
+//         }"#
+//     .chars()
+//     .collect();
+//     let ast = parse_ast(&code).expect("parse ok");
+//     let mut ctx = Ctx::new(ast);
+//     let res = eval(&0, &mut ctx);
+//     if let N::Num(x) = res {
+//         assert_eq!(x, 6.0)
+//     } else {
+//         assert!(false)
+//     }
+// }

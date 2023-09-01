@@ -36,7 +36,7 @@ pub enum N {
         name: String,
     },
     Binary {
-        op: BinaryOp,
+        op: BinOp,
         l: NI,
         r: NI,
     },
@@ -62,18 +62,26 @@ impl core::fmt::Debug for Native {
     }
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BinaryOp {
-    Plus,
-    Minus,
-    Mul,
-    Div,
-    Assign,
-    Lesser,
-    Greater,
+pub enum BinOp {
+    Mul = 0,
+    Div = 1,
     Equals,
     NotEquals,
+    Lesser,
+    Greater,
     Modulus,
+    And,
+    Or,
+    Plus,
+    Minus,
+    Assign,
+}
+impl BinOp {
+    pub fn term_separate(self) -> bool {
+        self as u8 > 1
+    }
 }
 
 impl N {
@@ -84,7 +92,7 @@ impl N {
         }
     }
     ///Cast to to boolean. The equivalent of js: self == true
-    pub fn is_truthy(&self) -> bool {
+    pub fn to_bool(&self) -> bool {
         match self {
             N::Num(x) if *x != 0.0 => true,
             N::Str(s) => !s.is_empty(),
@@ -111,10 +119,11 @@ pub enum Token {
     If,
     Else,
     Comma,
+    ParStart,
     ParEnd,
     While,
     Quoted(String),
-    Bin(BinaryOp),
+    Bin(BinOp),
     N(N),
     Let(String),
     Err(String),
@@ -170,6 +179,10 @@ impl Ctx {
     }
 }
 
+fn bool_n(b: bool) -> N {
+    N::Num(if b { 1.0 } else { 0.0 })
+}
+
 ///Interprets the ctx at the node index specified (0 for root)
 pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
     match ctx.get_n(*ni) {
@@ -177,17 +190,13 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
             condition,
             path_true,
             path_false,
-        } => {
-            if eval(&condition, ctx).is_truthy() {
-                eval(&path_true, ctx)
-            } else {
-                eval(&path_false, ctx)
-            }
-        }
-
+        } => match eval(&condition, ctx).to_bool() {
+            true => eval(&path_true, ctx),
+            false => eval(&path_false, ctx),
+        },
         N::While { condition, body } => {
             let mut res = N::Unit;
-            while eval(&condition, ctx).is_truthy() {
+            while eval(&condition, ctx).to_bool() {
                 res = eval(&body, ctx)
             }
             res
@@ -206,10 +215,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
             ctx.set_var_scoped(&name, val);
             N::Unit
         }
-        N::Get { name } => match ctx.find_var(&name) {
-            Some((_, n)) => n,
-            _ => N::Unit,
-        },
+        N::Get { name } => ctx.find_var(&name).map(|e| e.1).unwrap_or(N::Unit),
         N::FuncCall { func, args } => match eval(&func, ctx) {
             N::FuncNativeDef(native) => native.0(
                 args.first().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
@@ -233,7 +239,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
         },
 
         N::Binary { op, l, r } => {
-            if let BinaryOp::Assign = op {
+            if let BinOp::Assign = op {
                 let n = ctx.get_n(l);
                 if let N::Get { name } = n {
                     if let Some((key, _)) = ctx.find_var(&name) {
@@ -241,40 +247,29 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
                         ctx.set_var_absolute(&key, v);
                     }
                 }
-                N::Unit
-            } else {
-                let lt = eval(&l, ctx);
-                let rt = eval(&r, ctx);
-                match (op, &lt, &rt) {
-                    (BinaryOp::Plus, N::Num(li), N::Num(ri)) => N::Num(li + ri),
-                    (BinaryOp::Greater, N::Num(li), N::Num(ri)) => {
-                        N::Num(if li > ri { 1.0 } else { 0.0 })
-                    }
-                    (BinaryOp::Lesser, N::Num(li), N::Num(ri)) => {
-                        N::Num(if li < ri { 1.0 } else { 0.0 })
-                    }
-                    (BinaryOp::Equals, N::Num(li), N::Num(ri)) => {
-                        N::Num(if li == ri { 1.0 } else { 0.0 })
-                    }
-                    (BinaryOp::Equals, N::Str(li), N::Str(ri)) => {
-                        N::Num(if li == ri { 1.0 } else { 0.0 })
-                    }
-                    (BinaryOp::NotEquals, N::Num(li), N::Num(ri)) => {
-                        N::Num(if li != ri { 1.0 } else { 0.0 })
-                    }
-                    (BinaryOp::NotEquals, N::Str(li), N::Str(ri)) => {
-                        N::Num(if li != ri { 1.0 } else { 0.0 })
-                    }
-                    (BinaryOp::Minus, N::Num(li), N::Num(ri)) => N::Num(li - ri),
-                    (BinaryOp::Mul, N::Num(li), N::Num(ri)) => N::Num(li * ri),
-                    (BinaryOp::Div, N::Num(li), N::Num(ri)) => N::Num(li / ri),
-                    (BinaryOp::Modulus, N::Num(li), N::Num(ri)) => N::Num(li.rem(ri)),
-                    (BinaryOp::Plus, N::Str(li), ri) => N::Str(format!("{}{}", li, ri.to_str())),
-                    (BinaryOp::Plus, li, N::Str(ri)) => N::Str(format!("{}{}", li.to_str(), ri)),
-                    _ => {
-                        info!("ERROR: bin {:?} {:?}", lt, rt);
-                        N::Unit
-                    }
+                return N::Unit;
+            }
+            let lt = eval(&l, ctx);
+            let rt = eval(&r, ctx);
+            match (op, &lt, &rt) {
+                (BinOp::Plus, N::Num(li), N::Num(ri)) => N::Num(li + ri),
+                (BinOp::Greater, N::Num(li), N::Num(ri)) => bool_n(li > ri),
+                (BinOp::Lesser, N::Num(li), N::Num(ri)) => bool_n(li < ri),
+                (BinOp::Equals, N::Num(li), N::Num(ri)) => bool_n(li == ri),
+                (BinOp::Equals, N::Str(li), N::Str(ri)) => bool_n(li == ri),
+                (BinOp::NotEquals, N::Num(li), N::Num(ri)) => bool_n(li != ri),
+                (BinOp::NotEquals, N::Str(li), N::Str(ri)) => bool_n(li != ri),
+                (BinOp::And, li, ri) => bool_n(li.to_bool() && ri.to_bool()),
+                (BinOp::Or, li, ri) => bool_n(li.to_bool() || ri.to_bool()),
+                (BinOp::Minus, N::Num(li), N::Num(ri)) => N::Num(li - ri),
+                (BinOp::Mul, N::Num(li), N::Num(ri)) => N::Num(li * ri),
+                (BinOp::Div, N::Num(li), N::Num(ri)) => N::Num(li / ri),
+                (BinOp::Modulus, N::Num(li), N::Num(ri)) => N::Num(li.rem(ri)),
+                (BinOp::Plus, N::Str(li), ri) => N::Str(format!("{}{}", li, ri.to_str())),
+                (BinOp::Plus, li, N::Str(ri)) => N::Str(format!("{}{}", li.to_str(), ri)),
+                _ => {
+                    info!("ERROR: bin {:?} {:?}", lt, rt);
+                    N::Unit
                 }
             }
         }
@@ -444,25 +439,27 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
         }
         if starts_with(*i, "==") {
             *i += 2;
-            break Token::Bin(BinaryOp::Equals);
+            break Token::Bin(BinOp::Equals);
         }
         if starts_with(*i, "!=") {
             *i += 2;
-            break Token::Bin(BinaryOp::NotEquals);
+            break Token::Bin(BinOp::NotEquals);
         }
         for (key, val) in [
             (',', Token::Comma),
             (')', Token::ParEnd),
             ('{', Token::BlockStart),
             ('}', Token::BlockEnd),
-            ('+', Token::Bin(BinaryOp::Plus)),
-            ('-', Token::Bin(BinaryOp::Minus)),
-            ('*', Token::Bin(BinaryOp::Mul)),
-            ('/', Token::Bin(BinaryOp::Div)),
-            ('=', Token::Bin(BinaryOp::Assign)),
-            ('>', Token::Bin(BinaryOp::Greater)),
-            ('<', Token::Bin(BinaryOp::Lesser)),
-            ('%', Token::Bin(BinaryOp::Modulus)),
+            ('+', Token::Bin(BinOp::Plus)),
+            ('-', Token::Bin(BinOp::Minus)),
+            ('*', Token::Bin(BinOp::Mul)),
+            ('/', Token::Bin(BinOp::Div)),
+            ('=', Token::Bin(BinOp::Assign)),
+            ('>', Token::Bin(BinOp::Greater)),
+            ('<', Token::Bin(BinOp::Lesser)),
+            ('%', Token::Bin(BinOp::Modulus)),
+            ('&', Token::Bin(BinOp::And)),
+            ('|', Token::Bin(BinOp::Or)),
         ] {
             if code[*i] == key {
                 *i += 1;
@@ -510,19 +507,20 @@ pub fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
 
     let mut j = *i;
     let token = next_token(&mut j, code);
+
     if let Token::Bin(op) = token {
-        *i = j;
-
-        let term_right = parse_expr(ast, i, code, pad + 1)?;
-
-        let n = N::Binary {
-            op,
-            l: term,
-            r: term_right,
-        };
-        let block_ni = ast.len();
-        ast.push(n);
-        return Ok(block_ni);
+        if op.clone().term_separate() {
+            *i = j;
+            let term_right = parse_expr(ast, i, code, pad + 1)?;
+            let n = N::Binary {
+                op,
+                l: term,
+                r: term_right,
+            };
+            let block_ni = ast.len();
+            ast.push(n);
+            return Ok(block_ni);
+        }
     }
 
     Ok(term)
@@ -538,8 +536,50 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
         pa(pad),
         &code[*i..(*i + 5).min(code.len() - 1)]
     );
+
+    let factor = parse_factor(ast, i, code, pad + 1)?;
+    let mut j = *i;
+    let token = next_token(&mut j, code);
+    match token {
+        Token::Bin(BinOp::Mul) | Token::Bin(BinOp::Div) | Token::ParStart => {
+            *i = j;
+            let factor_right = parse_factor(ast, i, code, pad + 1)?;
+            match token {
+                Token::Bin(op) => {
+                    let n = N::Binary {
+                        op,
+                        l: factor,
+                        r: factor_right,
+                    };
+                    let block_ni = ast.len();
+                    ast.push(n);
+                    return Ok(block_ni);
+                }
+
+                Token::ParStart => {}
+                _ => {}
+            }
+        }
+
+        _ => {}
+    }
+
+    Ok(factor)
+}
+
+pub fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
+    if *i >= code.len() {
+        return Err("EOF");
+    }
+
+    info!(
+        "{}parse_factor {:?}",
+        pa(pad),
+        &code[*i..(*i + 5).min(code.len() - 1)]
+    );
+
     let token = next_token(i, code);
-    info!("{}p{:?}", pa(pad), token);
+    info!("{}{:?}", pa(pad), token);
     if let Token::BlockStart = token {
         let block_ni = ast.len();
         ast.push(N::Block(Vec::new()));

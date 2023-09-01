@@ -107,6 +107,80 @@ let _ = eval(&0, &mut ctx);
 - Read-Eval-Print Loop
 - Error handling (now it just UB if something goes wrong)
 - Escape characters in quoted strings
-- Operator precedence
 
 Also the inner workings are not very rust-like, no unsafe though ;)
+Should be panic free during eval. Don't trust the parser just yet.
+
+# Features
+
+- [x] String type
+- [x] Number type (f64)
+- [x] Scoped variable assignment
+- [x] Binary operators +,-,/,\*,>,<,==,!=,&,|
+- [x] Operator precedence
+- [x] Higher order function
+- [x] Control flow if/else/while
+- [x] Custom native function
+
+# Performance
+
+Parsing is instantaneous (50+GB/sec).
+
+Evaluation is slow, but reasonable for scripting:
+
+- Worst case 1:1000 compared to native
+- Common case 1:20 when using native functions reasonably.
+
+See for yourself with `cargo bench`
+
+# Fun facts
+
+Everything is an expression. For instance if/else acts as a ternary operator.
+
+`let x= if 1 99 else 45`
+
+now x is 99
+
+When there is a doubt, the interpreter default to `N::Unit`. For instance let's not put an else branch:
+
+`let x=  if 0 1`
+
+x is now `N::Unit`
+
+No parenthesis needed for the `if` condition or body, the previous expression is equivalent to:
+`let x=  if 0 {1} else {N::Unit}`
+
+Same goes for while, it returns `N::Unit` if it never runs the body, or the last body expression if it runs at least once.
+
+Same goes for brackets :
+
+`let x = {1 2 3}` is equivalent to `let x = {3}` or `let x = 3` or
+
+```
+let x = {
+    1
+    2
+    3
+}
+```
+
+There is no parenthesis, use brackets to force factorization and precedence.
+
+`\n` is just a whitespace like space. It doesn't separate statements more than space, like most languages.
+
+No boolean. If you want true and false, just prepend to your script:
+
+```rust
+let true = 1
+let false = 0
+```
+
+Boolean operation automatically cast operand to bool (lookup `to_bool` to see how)
+
+the (and,or) operators are (`&`,`|`)
+
+`1 & 0` evaluate to 0
+
+`1 | 0` evaluate to 1
+
+No bitwise operation yet.
