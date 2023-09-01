@@ -74,6 +74,70 @@ fn flow_if_no_else_1() {
         assert!(false)
     }
 }
+
+#[test]
+fn flow_if_else_0() {
+    let code: Vec<char> = r#"{
+        let x = 0
+        let y = if x>5 {
+            x = 6
+            x
+        }else 10
+        y
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 10.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn flow_if_else_1() {
+    let code: Vec<char> = r#"{
+        let x = 0
+        let y = if x<5 {
+            x = 6
+            x
+        }else 10
+        y
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 6.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn flow_if_else_mini() {
+    let code: Vec<char> = r#"{
+        let true = 1
+        let y = if true 10 else 20
+        y
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 10.0)
+    } else {
+        assert!(false)
+    }
+}
+
 #[test]
 fn string_concat() {
     let code: Vec<char> = r#"{"hello" +" "+"world"}"#.chars().collect();
@@ -207,6 +271,42 @@ fn op_greater() {
     let res = eval(&0, &mut ctx);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn missing_args() {
+    let code: Vec<char> = r#"{
+        let f = (a,b,c)=> a+b+c
+        f(1,2)
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Unit = res {
+        assert!(true)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn over_args() {
+    let code: Vec<char> = r#"{
+        let f = (a,b,c)=> a+b+c
+        f(1,2,3,4)
+        }"#
+    .chars()
+    .collect();
+    let ast = parse_ast(&code).expect("parse ok");
+    let mut ctx = Ctx::new(ast);
+    let res = eval(&0, &mut ctx);
+    if let N::Num(x) = res {
+        assert_eq!(x, 6.0)
     } else {
         assert!(false)
     }

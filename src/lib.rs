@@ -51,6 +51,8 @@ pub enum N {
     Str(String),
     Unit,
 }
+
+///Native rust closure wrapper, to be inserted in the script
 #[derive(Clone)]
 pub struct Native(pub alloc::rc::Rc<dyn Fn(N, N, N, N) -> N>);
 
@@ -168,6 +170,7 @@ impl Ctx {
     }
 }
 
+///Interprets the ctx at the node index specified (0 for root)
 pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
     match ctx.get_n(*ni) {
         N::If {
@@ -215,10 +218,10 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
                 args.get(3).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
             ),
             N::FuncDef { args_name, scope } => {
-                for (i, arg) in args.iter().enumerate() {
-                    let val = eval(arg, ctx);
+                for (i, arg_name) in args_name.iter().enumerate() {
+                    let val = args.get(i).map(|e| eval(e, ctx)).unwrap_or(N::Unit);
                     ctx.path.push('_');
-                    ctx.set_var_scoped(&args_name[i], val);
+                    ctx.set_var_scoped(arg_name, val);
                     ctx.path.pop();
                 }
                 ctx.path.push('_');
@@ -286,7 +289,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
         }
     };
     let skip_comma = |i: &mut usize| {
-        if code[*i] == ',' {
+        if *i < code.len() && code[*i] == ',' {
             *i += 1;
         }
     };
@@ -294,7 +297,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
     let parse_number = |i: &mut usize| {
         let backup_i = *i;
         let mut id = String::from("");
-        while code[*i].is_ascii_digit() || code[*i] == '.' {
+        while code.len() > *i && (code[*i].is_ascii_digit() || code[*i] == '.') {
             id = format!("{}{}", id, code[*i]);
             *i += 1;
         }
@@ -313,7 +316,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
 
     let parse_ident = |i: &mut usize| {
         let mut id = String::from("");
-        while code[*i].is_alphanumeric() || code[*i] == '_' {
+        while code.len() > *i && (code[*i].is_alphanumeric() || code[*i] == '_') {
             id = format!("{}{}", id, code[*i]);
             *i += 1;
         }
@@ -346,6 +349,9 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             let mut builder = String::from("");
             loop {
                 *i += 1;
+                if *i >= code.len() {
+                    return Token::Err(String::from("i>code"));
+                }
                 let c = code[*i];
                 if c != '"' {
                     builder.push(c);
@@ -385,7 +391,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             };
             skip_whitespaces(i);
 
-            if code[*i] != '=' {
+            if *i >= code.len() || code[*i] != '=' {
                 break Token::Err(String::from("no equal after let 'id' # "));
             }
             *i += 1;
@@ -395,7 +401,9 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
         if code[*i] == '(' {
             //let i_backup = *i;
             *i += 1;
-
+            if *i >= code.len() {
+                return Token::Err(String::from("i>code"));
+            }
             let mut idents = Vec::new();
             loop {
                 skip_whitespaces(i);
@@ -408,13 +416,13 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
 
             skip_whitespaces(i);
 
-            if code[*i] != ')' {
+            if *i >= code.len() || code[*i] != ')' {
                 break Token::Err(String::from("no end parenthesis after args"));
             }
             *i += 1;
             skip_whitespaces(i);
 
-            if code[*i] != '=' || code[*i + 1] != '>' {
+            if *i + 1 >= code.len() || code[*i] != '=' || code[*i + 1] != '>' {
                 break Token::Err(String::from("no => after args"));
             }
             *i += 2;
