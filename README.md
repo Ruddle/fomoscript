@@ -41,53 +41,41 @@ Only a few days old. **Not** production ready. The goal is to use it in [Fomos](
 
 # Use in Rust
 
-**Step 1**: have some code
+Parse and evaluate a script:
 
 ```rust
-let code: Vec<char> = r#"
-{
+let result = fomoscript::parse_eval("{
     let x = 0
     while x<5 {
         x = x+1
     }
     x
-}"#
-    .chars()
-    .collect();
-```
-
-**Step 2**: parse it
-
-```rust
-let ast = parse_ast(&code).expect("parse ok");
-```
-
-**Step 3**: run it
-
-```rust
-let mut ctx = Ctx::new(ast);
-let result = eval(&0, &mut ctx);
+}");
 ```
 
 The result will have [this type](/src/lib.rs#L36).
 
 Go see the [tests](/src/test.rs) for more examples.
 
-By default, there is no side effect possible from the script during eval (except inside ctx)
+`parse_eval` is a high level function hiding the lower level `Ctx`.
 
-You can insert native rust closure with (or without) side effects into the script, and use it from there.
+You can explicitly instantiate an interpreter called `Ctx` to implement a REPL or explore/modify the state during execution.
+
+By default, there is **no side effect** possible from the script during eval (except inside ctx)
+
+You can **insert native** rust closure with (or without) **side effects** into the `Ctx`, and use it from there.
 Example with the print function:
 
 ```rust
-let code: Vec<char> = r#"
+use fomoscript::*;
+let code = r#"
 {
     my_print(1+1)
 }
-"#
-.chars()
-.collect();
-let ast = parse_ast(&code).unwrap();
-let mut ctx = Ctx::new(ast);
+"#;
+
+let mut ctx = Ctx::new();
+ctx.insert_code(code);
 
 let print_closure = Rc::new(|a: N, _, _, _| {
     println!("{}", a.to_str());
@@ -95,7 +83,27 @@ let print_closure = Rc::new(|a: N, _, _, _| {
 });
 ctx.set_var_absolute("my_print", N::FuncNativeDef(Native(print_closure)));
 
-let _ = eval(&0, &mut ctx);
+let expr = ctx.parse_next_expr().unwrap();
+let _ = eval(&expr, &mut ctx);
+```
+
+### REPL
+
+For simplicity, std is used here, but you can replace it with any input and output impl.
+
+```rust
+use fomoscript::*;
+let mut ctx = Ctx::new();
+let mut buffer = String::new();
+loop {
+    buffer.clear();
+    std::io::stdin().read_line(&mut buffer).unwrap();
+    ctx.insert_code(&buffer);
+    while let Ok(parent) = ctx.parse_next_expr() {
+        let res = eval(&parent, &mut ctx);
+        println!("> {:?}", res);
+    }
+}
 ```
 
 # Cruelly missing
@@ -104,7 +112,6 @@ let _ = eval(&0, &mut ctx);
 - Months of work
 - Pattern matching
 - Javascript-like objects (we just have Number and String 😱)
-- Read-Eval-Print Loop
 - Error handling (now it just UB if something goes wrong)
 - Escape characters in quoted strings
 
@@ -121,7 +128,8 @@ Should be panic free during eval. Don't trust the parser just yet.
 - [x] Higher order function
 - [x] Control flow if/else/while
 - [x] Custom native function
-- [x] Anonymous function call
+- [x] Anonymous function call$
+- [x] REPL example
 
 # Performance
 

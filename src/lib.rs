@@ -72,7 +72,7 @@ pub enum BinOp {
     Assign,
 }
 impl BinOp {
-    pub fn term_separate(self) -> bool {
+    fn term_separate(self) -> bool {
         self as u8 > 1
     }
 }
@@ -106,7 +106,7 @@ impl N {
 ///
 /// Consumed to produce the AST.
 #[derive(Debug, Clone)]
-pub enum Token {
+enum Token {
     BlockStart,
     BlockEnd,
     If,
@@ -120,7 +120,6 @@ pub enum Token {
     N(N),
     Let(Identifier),
     Err(String),
-    FuncDefStart { args: Vec<Identifier> },
     Assoc,
 }
 
@@ -129,17 +128,20 @@ pub struct Ctx {
     pub ast: AST,
     pub variables: BTreeMap<String, N>,
     pub path: String,
+    pub code: Vec<char>,
 }
 
 impl Ctx {
-    pub fn new(ast: AST) -> Ctx {
+    pub fn new() -> Ctx {
         Ctx {
-            ast,
+            ast: Vec::new(),
             variables: BTreeMap::new(),
             path: String::from("_"),
+            code: Vec::new(),
         }
     }
-    pub fn get_n(&self, idx: NI) -> N {
+
+    pub fn n(&self, idx: NI) -> N {
         self.ast[idx].clone()
     }
     pub fn set_var_scoped(&mut self, name: &str, n: N) {
@@ -170,15 +172,42 @@ impl Ctx {
             }
         }
     }
+
+    pub fn insert_code(&mut self, code: &str) {
+        self.code.extend(code.chars());
+    }
+
+    pub fn parse_next_expr(&mut self) -> Result<NI, Error> {
+        let mut i = 0;
+        let expr = parse_expr(&mut self.ast, &mut i, &self.code, 0)?;
+        self.code.drain(0..i);
+        Ok(expr)
+    }
+}
+
+impl Default for Ctx {
+    fn default() -> Self {
+        Ctx::new()
+    }
+}
+
+pub fn parse_eval(code: &str) -> N {
+    let mut ctx = Ctx::new();
+    ctx.insert_code(code);
+    let mut res = N::Unit;
+    while let Ok(parent) = ctx.parse_next_expr() {
+        res = eval(&parent, &mut ctx);
+    }
+    res
 }
 
 fn bool_n(b: bool) -> N {
     N::Num(if b { 1.0 } else { 0.0 })
 }
 
-///Interprets the ctx at the node index specified (0 for root)
+///Interprets the node using the ctx/interpreter provided
 pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
-    match ctx.get_n(*ni) {
+    match ctx.n(*ni) {
         N::If {
             condition,
             path_true,
@@ -233,7 +262,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
 
         N::Binary(op, l, r) => {
             if let BinOp::Assign = op {
-                let n = ctx.get_n(l);
+                let n = ctx.n(l);
                 if let N::Get(name) = n {
                     if let Some((key, _)) = ctx.find_var(&name) {
                         let v = eval(&r, ctx);
@@ -270,7 +299,7 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
     }
 }
 
-pub fn next_token(i: &mut usize, code: &[char]) -> Token {
+fn next_token(i: &mut usize, code: &[char]) -> Token {
     let skip_whitespaces = |i: &mut usize| {
         while *i < code.len() && (code[*i] == ' ' || code[*i] == '\n') {
             *i += 1;
@@ -324,6 +353,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
     };
     loop {
         skip_whitespaces(i);
+
         if *i >= code.len() {
             break Token::Err(String::from("i>code"));
         }
@@ -342,27 +372,21 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
             }
             return Token::Err(String::from("i>code"));
         }
-        if starts_with(*i, "if") && *i + 2 < code.len() {
-            let c2 = code[*i + 2];
-            if c2 == ' ' || c2 == '{' {
-                *i += 2;
-                break Token::If;
+
+        for (s, tok) in [
+            ("if", Token::If),
+            ("else", Token::Else),
+            ("while", Token::While),
+        ] {
+            if starts_with(*i, s)
+                && *i + s.len() < code.len()
+                && [' ', '{'].contains(&code[*i + s.len()])
+            {
+                *i += s.len();
+                return tok;
             }
         }
-        if starts_with(*i, "else") && *i + 4 < code.len() {
-            let c2 = code[*i + 4];
-            if c2 == ' ' || c2 == '{' {
-                *i += 4;
-                break Token::Else;
-            }
-        }
-        if starts_with(*i, "while") && *i + 5 < code.len() {
-            let c2 = code[*i + 5];
-            if c2 == ' ' || c2 == '{' {
-                *i += 5;
-                break Token::While;
-            }
-        }
+
         if starts_with(*i, "let ") && *i + 4 < code.len() {
             *i += 4;
             skip_whitespaces(i);
@@ -371,12 +395,10 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
                 None => break Token::Err(String::from("no id after let # ")),
             };
             skip_whitespaces(i);
-
             if *i >= code.len() || code[*i] != '=' {
                 break Token::Err(String::from("no equal after let 'id' # "));
             }
             *i += 1;
-
             break Token::Let(id);
         }
 
@@ -426,7 +448,7 @@ pub fn next_token(i: &mut usize, code: &[char]) -> Token {
     }
 }
 
-pub fn insert_in_parent(ast: &mut AST, parent: NI, child: NI) {
+fn insert_in_parent(ast: &mut AST, parent: NI, child: NI) {
     match &mut ast[parent] {
         N::Block(v) => {
             v.push(child);
@@ -443,19 +465,7 @@ fn pa(i: usize) -> String {
 }
 type Error = &'static str;
 
-pub fn parse_eval(code: &[char]) -> Result<N, Error> {
-    let (ast, parent) = parse_ast(code)?;
-    let mut ctx = Ctx::new(ast);
-    Ok(eval(&parent, &mut ctx))
-}
-
-pub fn parse_ast(code: &[char]) -> Result<(AST, NI), Error> {
-    let mut i = 0;
-    let mut ast = Vec::new();
-    parse_expr(&mut ast, &mut i, code, 0).map(|ni| (ast, ni))
-}
-
-pub fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
+fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
     info!(
         "{}parse expr {:?}",
         pa(pad),
@@ -480,7 +490,7 @@ pub fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
     Ok(term)
 }
 
-pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
+fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
     info!(
         "{}parse_term {:?}",
         pa(pad),
@@ -548,7 +558,7 @@ pub fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Re
     Ok(factor)
 }
 
-pub fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
+fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
     if *i >= code.len() {
         return Err("EOF");
     }

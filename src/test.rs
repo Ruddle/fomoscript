@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn binary_opt() {
-    let code: Vec<char> = r#"{1+1}"#.chars().collect();
-    let res = parse_eval(&code).unwrap();
+    let code = r#"{1+1}"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 2.0)
     } else {
@@ -13,16 +13,14 @@ fn binary_opt() {
 
 #[test]
 fn flow_while_0() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         while x<5 {
             x = x+1
         }
         x
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 5.0)
     } else {
@@ -32,16 +30,14 @@ fn flow_while_0() {
 
 #[test]
 fn flow_if_no_else_0() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         if x<5 {
             x = 6
             x
         }
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
     } else {
@@ -50,16 +46,14 @@ fn flow_if_no_else_0() {
 }
 #[test]
 fn flow_if_no_else_1() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         if x>5 {
             x = 6
             x
         }
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Unit = res {
         assert!(true)
     } else {
@@ -69,17 +63,15 @@ fn flow_if_no_else_1() {
 
 #[test]
 fn flow_if_else_0() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         let y = if x>5 {
             x = 6
             x
         }else 10
         y
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 10.0)
     } else {
@@ -89,17 +81,15 @@ fn flow_if_else_0() {
 
 #[test]
 fn flow_if_else_1() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         let y = if x<5 {
             x = 6
             x
         }else 10
         y
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
     } else {
@@ -109,14 +99,12 @@ fn flow_if_else_1() {
 
 #[test]
 fn flow_if_else_mini() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let true = 1
         let y = if true 10 else 20
         y
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 10.0)
     } else {
@@ -126,8 +114,8 @@ fn flow_if_else_mini() {
 
 #[test]
 fn string_concat() {
-    let code: Vec<char> = r#"{"hello" +" "+"world"}"#.chars().collect();
-    let res = parse_eval(&code).unwrap();
+    let code = r#"{"hello" +" "+"world"}"#;
+    let res = parse_eval(&code);
     if let N::Str(x) = res {
         assert_eq!(x, String::from("hello world"))
     } else {
@@ -137,15 +125,13 @@ fn string_concat() {
 
 #[test]
 fn higher_order_func() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         let f = (e) => {e+1}
         let g=  (f,e)=> f(e)
         g(f,x)
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -155,7 +141,7 @@ fn higher_order_func() {
 
 #[test]
 fn scope() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         if x<1 {
             let y = 1
@@ -164,10 +150,8 @@ fn scope() {
                 x+y+z
             }
         }
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 3.0)
     } else {
@@ -177,17 +161,15 @@ fn scope() {
 
 #[test]
 fn big_function() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         let f = (a,b,c) => {
             let d = 1000
             a+b+c+d
         }
         f(0,1,2)
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1003.0)
     } else {
@@ -197,13 +179,11 @@ fn big_function() {
 
 #[test]
 fn smol_function() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let f = (a) => 1+a
         f(10)
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 11.0)
     } else {
@@ -213,16 +193,14 @@ fn smol_function() {
 
 #[test]
 fn op_equals() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         if x==0{
             x =x+1
         }
         x
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -231,16 +209,14 @@ fn op_equals() {
 }
 #[test]
 fn op_greater() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         if 1>x{
             x =x+1
         }
         x
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -250,13 +226,11 @@ fn op_greater() {
 
 #[test]
 fn missing_args() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let f = (a,b,c)=> a+b+c
         f(1,2)
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Unit = res {
         assert!(true)
     } else {
@@ -266,13 +240,11 @@ fn missing_args() {
 
 #[test]
 fn over_args() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let f = (a,b,c)=> a+b+c
         f(1,2,3,4)
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
     } else {
@@ -282,12 +254,10 @@ fn over_args() {
 
 #[test]
 fn op_precedence_0() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         2+3*4
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 14.0)
     } else {
@@ -297,12 +267,10 @@ fn op_precedence_0() {
 
 #[test]
 fn op_precedence_1() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         3*4+2
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 14.0)
     } else {
@@ -312,12 +280,10 @@ fn op_precedence_1() {
 
 #[test]
 fn op_boolean_0() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         0&1
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 0.0)
     } else {
@@ -327,12 +293,10 @@ fn op_boolean_0() {
 
 #[test]
 fn op_boolean_1() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         1&parent
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 0.0)
     } else {
@@ -342,12 +306,10 @@ fn op_boolean_1() {
 
 #[test]
 fn op_boolean_2() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         1&1
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -357,12 +319,10 @@ fn op_boolean_2() {
 
 #[test]
 fn op_boolean_3() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         0|1
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -372,12 +332,10 @@ fn op_boolean_3() {
 
 #[test]
 fn op_boolean_4() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         1|0
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -387,12 +345,10 @@ fn op_boolean_4() {
 
 #[test]
 fn op_boolean_5() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         1|1
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 1.0)
     } else {
@@ -402,12 +358,10 @@ fn op_boolean_5() {
 
 #[test]
 fn op_boolean_6() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         0|0
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 0.0)
     } else {
@@ -417,14 +371,12 @@ fn op_boolean_6() {
 
 #[test]
 fn func_returns_func() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let f = (e) => {(a)=> a+e}
         let g = f(1)
         g(2)
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 3.0)
     } else {
@@ -434,12 +386,10 @@ fn func_returns_func() {
 
 #[test]
 fn anonymous_func() {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         {(a,b,c)=> a+b+c}(1,2,3)
-        }"#
-    .chars()
-    .collect();
-    let res = parse_eval(&code).unwrap();
+        }"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 6.0)
     } else {
@@ -448,12 +398,10 @@ fn anonymous_func() {
 }
 
 #[test]
-fn multiple_expr() {
-    let code: Vec<char> = r#"let x = 5
-    x+2"#
-        .chars()
-        .collect();
-    let res = parse_eval(&code).unwrap();
+fn multiple_expr_no_block() {
+    let code = r#"let x = 5
+    x+2"#;
+    let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 7.0)
     } else {

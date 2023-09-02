@@ -2,18 +2,19 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fomoscript::*;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         while x<1000 
             x = x+1
         x
-        }"#
-    .chars()
-    .collect();
-    let (ast, parent) = parse_ast(&code).expect("parse ok");
+        }"#;
+
+    let mut ctx = Ctx::new();
+    ctx.insert_code(code);
+    let parent = ctx.parse_next_expr().unwrap();
+
     c.bench_function("counter", |b| {
         b.iter(|| {
-            let mut ctx = Ctx::new(ast.clone());
             black_box(eval(&parent, &mut ctx));
         })
     });
@@ -28,7 +29,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    let code: Vec<char> = r#"{
+    let code = r#"{
         let x = 0
         while x<1000 {
             {
@@ -38,20 +39,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             }
         }
         x
-        }"#
-    .chars()
-    .collect();
-    let (ast, parent) = parse_ast(&code).expect("parse ok");
+        }"#;
+    let mut ctx = Ctx::new();
+    ctx.insert_code(code);
+    let parent = ctx.parse_next_expr().unwrap();
     c.bench_function("counter_deep", |b| {
         b.iter(|| {
-            let mut ctx = Ctx::new(ast.clone());
             black_box(eval(&parent, &mut ctx));
         })
     });
 
+    let mut ctx = Ctx::new();
     c.bench_function("counter_parse", |b| {
         b.iter(|| {
-            let code: Vec<char> = r#"{
+            let code = r#"{
                 let x = 0
                 while x<1000 {
                     {
@@ -61,10 +62,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     }
                 }
                 x
-                }"#
-            .chars()
-            .collect();
-            parse_ast(&black_box(code)).expect("parse ok");
+                }"#;
+            ctx.insert_code(code);
+            let _ = black_box(ctx.parse_next_expr().unwrap());
         })
     });
 }
