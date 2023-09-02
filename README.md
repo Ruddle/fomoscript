@@ -1,3 +1,5 @@
+![Crates.io](https://img.shields.io/crates/v/fomoscript?link=https%3A%2F%2Fcrates.io%2Fcrates%2Ffomoscript)
+
 # fomoscript
 
 Toy scripting language, built with Rust
@@ -39,7 +41,14 @@ Only a few days old. **Not** production ready. The goal is to use it in [Fomos](
 
 `returns 1`
 
-# Use in Rust
+# Usage
+
+Add this to your Cargo.toml:
+
+```toml
+[dependencies]
+fomoscript = "0.2.1"
+```
 
 Parse and evaluate a script:
 
@@ -147,7 +156,7 @@ Typed arrays (like in js) could be added in the future for fast structured opera
 
 # Fun facts
 
-Everything is an expression. For instance if/else acts as a ternary operator.
+Everything is an expression in fomoscript. For instance if/else acts as a ternary operator.
 
 `let x= if 1 99 else 45`
 
