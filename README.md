@@ -8,9 +8,13 @@ Toy scripting language, built with Rust
 - 1 [file](/src/lib.rs)
 - no_std with alloc
 
-Only a few days old. **Not** production ready. The goal is to use it in [Fomos](https://github.com/Ruddle/Fomos) as a shell.
+Only a few days old. **Not** production ready. One goal is to use it in [Fomos](https://github.com/Ruddle/Fomos) as a shell. But you can ship it anywhere.
 
 \* except log, doesn't count ;)
+
+### Demo inside Fomos
+
+https://github.com/Ruddle/fomoscript/assets/14235713/a69e00cd-1985-4a54-9f75-e1e91a19949a
 
 # Examples
 
