@@ -63,7 +63,7 @@ You can explicitly instantiate an interpreter called `Ctx` to implement a REPL o
 
 By default, there is **no side effect** possible from the script during eval (except inside ctx)
 
-You can **insert native** rust closure with (or without) **side effects** into the `Ctx`, and use it from there.
+You can **insert native** rust closure with (or without) **side effects** into the `Ctx`, and use it from inside the script.
 Example with the print function:
 
 ```rust
@@ -109,11 +109,11 @@ loop {
 # Cruelly missing
 
 - Arrays
-- Months of work
-- Pattern matching
 - Javascript-like objects (we just have Number and String 😱)
 - Error handling (now it just UB if something goes wrong)
 - Escape characters in quoted strings
+- Months of work
+- Pattern matching
 
 Also the inner workings are not very rust-like, no unsafe though ;)
 Should be panic free during eval. Don't trust the parser just yet.

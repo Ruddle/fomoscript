@@ -408,3 +408,17 @@ fn multiple_expr_no_block() {
         assert!(false)
     }
 }
+
+#[test]
+fn fibonacci() {
+    let code = "
+let fib = (e)=> if e<2 e else fib(e-1)+fib(e-2)
+fib(10)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 55.0)
+    } else {
+        assert!(false)
+    }
+}
