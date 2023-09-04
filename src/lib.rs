@@ -198,7 +198,7 @@ fn bool_n(b: bool) -> N {
 }
 
 ///Interprets the node using the ctx/interpreter provided
-pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
+pub fn eval(n: &N, ctx: &mut Ctx) -> N {
     ctx.deep += 1;
     if log::log_enabled!(log::Level::Info) {
         info!("\n{}eval {:?}", pa(ctx.deep), n);
@@ -231,7 +231,7 @@ pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
         N::Block(arr) => {
             let variable_skip_begin = ctx.values.len();
             let mut res = N::Unit;
-            for a in arr.iter_mut() {
+            for a in arr.iter() {
                 res = eval(a, ctx);
             }
             if log::log_enabled!(log::Level::Info) {
@@ -254,10 +254,10 @@ pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
         N::Get(name) => ctx.find_var(name).map(|e| e.1.clone()).unwrap_or(N::Unit),
         N::FuncCall { func, args } => match eval(func, ctx) {
             N::FuncNativeDef(native) => native.0(
-                args.first_mut().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
-                args.get_mut(1).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
-                args.get_mut(2).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
-                args.get_mut(3).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.first().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get(1).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get(2).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get(3).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
             ),
             N::FuncDef {
                 args_name,
@@ -265,7 +265,7 @@ pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
             } => {
                 let variable_scope_index = ctx.values.len();
                 for (i, arg_name) in args_name.iter().enumerate() {
-                    let val = args.get_mut(i).map(|e| eval(e, ctx)).unwrap_or(N::Unit);
+                    let val = args.get(i).map(|e| eval(e, ctx)).unwrap_or(N::Unit);
                     ctx.set_var_scoped(arg_name, val);
                 }
                 let res = eval(&mut scope, ctx);
@@ -316,7 +316,7 @@ pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
         }
         N::FuncDef { args_name, scope } => N::FuncDef {
             args_name: args_name.clone(),
-            scope: bx!(dup(args_name, scope, ctx)),
+            scope: bx!(dup(&mut args_name.clone(), &mut scope.clone(), ctx)),
         },
         e => {
             info!("noop");

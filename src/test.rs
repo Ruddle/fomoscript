@@ -436,3 +436,56 @@ fac(5)
         assert!(false)
     }
 }
+
+#[test]
+fn block_returns_func() {
+    let code = "
+let f = {
+    let usefull = 6
+    let useless = 5
+    {() => 1+usefull}
+}
+f()
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 7.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn program_in_func() {
+    let code = "
+let f = ()=>{
+    let fac = (e)=> if e<2 e else fac(e-1)*e
+    fac(5)
+}
+f()
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 120.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn excluded_from_func_dup() {
+    // f instanciation (dup) should capture a and b, but not c, c is shadowed by the function argument variable
+    let code = "
+    let a = 1
+    let b = 2
+    let c = 5
+    let f = (c) => a+b+c
+    f(0)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 3.0)
+    } else {
+        assert!(false)
+    }
+}
