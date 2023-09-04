@@ -1,45 +1,46 @@
 #![no_std]
 use log::info;
 extern crate alloc;
-use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
+use alloc::{boxed::Box, format, string::String, vec::Vec};
 use core::{ops::Rem, result::Result};
 
-/// An index to an AST node
-pub type NI = usize;
-
-/// fomoscript AST.
-/// Nodes are stored in a Vec, and reference other nodes with their index.
-pub type AST = Vec<N>;
-
 pub type Identifier = String;
+pub type BN = Box<N>;
+pub type VN = Vec<N>;
+
+macro_rules! bx {
+    ($e:expr) => {
+        Box::new($e)
+    };
+}
 
 /// fomoscript AST node
 #[derive(Debug, Clone)]
 pub enum N {
     FuncCall {
-        func: NI,
-        args: Vec<NI>,
+        func: BN,
+        args: VN,
     },
-    Block(Vec<NI>),
+    Block(VN),
     If {
-        condition: NI,
-        path_true: NI,
-        path_false: NI,
+        condition: BN,
+        path_true: BN,
+        path_false: BN,
     },
     While {
-        condition: NI,
-        body: NI,
+        condition: BN,
+        body: BN,
     },
-    Set(Identifier, NI),
+    Set(Identifier, BN),
     Get(Identifier),
-    Binary(BinOp, NI, NI),
+    Binary(BinOp, BN, BN),
     //Terminal nodes, the following nodes can be output by eval
     FuncDef {
         args_name: Vec<Identifier>,
-        scope: NI,
+        scope: BN,
     },
     FuncNativeDef(Native),
-    Array(Vec<NI>),
+    Array(VN),
     Num(f64),
     Str(String),
     Unit,
@@ -56,7 +57,7 @@ impl core::fmt::Debug for Native {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum BinOp {
     Mul = 0,
     Div = 1,
@@ -125,63 +126,54 @@ enum Token {
 
 /// Interpreter context, holds all state during execution.
 pub struct Ctx {
-    pub ast: AST,
-    pub variables: BTreeMap<String, N>,
-    pub path: String,
+    pub values: Vec<N>,
+    pub idents: Vec<String>,
     pub code: Vec<char>,
+    pub deep: usize,
 }
 
 impl Ctx {
     pub fn new() -> Ctx {
         Ctx {
-            ast: Vec::new(),
-            variables: BTreeMap::new(),
-            path: String::from("_"),
+            values: Vec::new(),
+            idents: Vec::new(),
             code: Vec::new(),
+            deep: 0,
         }
     }
-
-    pub fn n(&self, idx: NI) -> N {
-        self.ast[idx].clone()
-    }
+    #[inline(always)]
     pub fn set_var_scoped(&mut self, name: &str, n: N) {
-        let key = format!("{}{}", self.path, name);
-        self.variables.insert(key, n);
+        self.idents.push(String::from(name));
+        self.values.push(n);
     }
-    pub fn set_var_absolute(&mut self, path: &str, n: N) {
-        self.variables.insert(String::from(path), n);
+
+    #[inline(always)]
+    pub fn set_var_absolute(&mut self, i: usize, name: &str, n: N) {
+        self.idents[i] = String::from(name);
+        self.values[i] = n;
     }
     /// Find a variable declared in the scope, or any parent scope
     ///
     /// returns the path and the variable value
-    pub fn find_var(&self, name: &str) -> Option<(String, N)> {
-        let mut base = self.path.clone();
-        loop {
-            let key = format!("{}{}", base, name);
-            let res = self.variables.get(&key);
-            match res {
-                Some(r) => {
-                    return Some((key, r.clone()));
-                }
-                None => {
-                    if base.pop().is_none() {
-                        info!("Unknown variable {}", name);
-                        return None;
-                    }
-                }
+    pub fn find_var(&self, name: &str) -> Option<(usize, N)> {
+        for (i, id) in self.idents.iter().enumerate().rev() {
+            if id == name {
+                return Some((i, self.values[i].clone()));
             }
         }
+        info!("Unknown variable {}", name);
+        None
     }
 
     pub fn insert_code(&mut self, code: &str) {
         self.code.extend(code.chars());
     }
 
-    pub fn parse_next_expr(&mut self) -> Result<NI, Error> {
+    pub fn parse_next_expr(&mut self) -> Result<N, Error> {
         let mut i = 0;
-        let expr = parse_expr(&mut self.ast, &mut i, &self.code, 0)?;
+        let res = parse_expr(&mut i, &self.code, 0)?;
         self.code.drain(0..i);
-        Ok(expr)
+        Ok(res)
     }
 }
 
@@ -195,8 +187,8 @@ pub fn parse_eval(code: &str) -> N {
     let mut ctx = Ctx::new();
     ctx.insert_code(code);
     let mut res = N::Unit;
-    while let Ok(parent) = ctx.parse_next_expr() {
-        res = eval(&parent, &mut ctx);
+    while let Ok(mut parent) = ctx.parse_next_expr() {
+        res = eval(&mut parent, &mut ctx);
     }
     res
 }
@@ -206,74 +198,102 @@ fn bool_n(b: bool) -> N {
 }
 
 ///Interprets the node using the ctx/interpreter provided
-pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
-    match ctx.n(*ni) {
+pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
+    ctx.deep += 1;
+    if log::log_enabled!(log::Level::Info) {
+        info!("\n{}eval {:?}", pa(ctx.deep), n);
+        for i in 0..ctx.idents.len() {
+            info!(
+                "{}{} {:?}:{:?}",
+                pa(ctx.deep),
+                i,
+                ctx.idents[i],
+                ctx.values[i]
+            );
+        }
+    }
+    let res = match n {
         N::If {
             condition,
             path_true,
             path_false,
-        } => match eval(&condition, ctx).to_bool() {
-            true => eval(&path_true, ctx),
-            false => eval(&path_false, ctx),
+        } => match eval(condition, ctx).to_bool() {
+            true => eval(path_true, ctx),
+            false => eval(path_false, ctx),
         },
         N::While { condition, body } => {
             let mut res = N::Unit;
-            while eval(&condition, ctx).to_bool() {
-                res = eval(&body, ctx)
+            while eval(condition, ctx).to_bool() {
+                res = eval(body, ctx)
             }
             res
         }
         N::Block(arr) => {
-            ctx.path.push('_');
+            let variable_skip_begin = ctx.values.len();
             let mut res = N::Unit;
-            for a in arr.iter() {
+            for a in arr.iter_mut() {
                 res = eval(a, ctx);
             }
-            ctx.path.pop();
+            if log::log_enabled!(log::Level::Info) {
+                for i in variable_skip_begin..ctx.values.len() {
+                    info!(
+                        "block forget {} {:?}:  {:?}",
+                        i, ctx.idents[i], ctx.values[i]
+                    );
+                }
+            }
+
+            ctx.values.drain(variable_skip_begin..);
+            ctx.idents.drain(variable_skip_begin..);
             res
         }
         N::Set(name, val) => {
-            let val = eval(&val, ctx);
-            ctx.set_var_scoped(&name, val);
+            let val = eval(val, ctx);
+            ctx.set_var_scoped(name, val);
             N::Unit
         }
-        N::Get(name) => ctx.find_var(&name).map(|e| e.1).unwrap_or(N::Unit),
-        N::FuncCall { func, args } => match eval(&func, ctx) {
+        N::Get(name) => ctx.find_var(name).map(|e| e.1).unwrap_or(N::Unit),
+        N::FuncCall { func, args } => match eval(func, ctx) {
             N::FuncNativeDef(native) => native.0(
-                args.first().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
-                args.get(1).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
-                args.get(2).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
-                args.get(3).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.first_mut().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get_mut(1).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get_mut(2).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
+                args.get_mut(3).map(|e| eval(e, ctx)).unwrap_or(N::Unit),
             ),
-            N::FuncDef { args_name, scope } => {
+            N::FuncDef {
+                args_name,
+                mut scope,
+            } => {
+                let variable_scope_index = ctx.values.len();
                 for (i, arg_name) in args_name.iter().enumerate() {
-                    let val = args.get(i).map(|e| eval(e, ctx)).unwrap_or(N::Unit);
-                    ctx.path.push('_');
+                    let val = args.get_mut(i).map(|e| eval(e, ctx)).unwrap_or(N::Unit);
                     ctx.set_var_scoped(arg_name, val);
-                    ctx.path.pop();
                 }
-                ctx.path.push('_');
-                let res = eval(&scope, ctx);
-                ctx.path.pop();
+                let res = eval(&mut scope, ctx);
+                if log::log_enabled!(log::Level::Info) {
+                    for i in variable_scope_index..ctx.values.len() {
+                        info!("forget {} {:?}:  {:?}", i, ctx.idents[i], ctx.values[i]);
+                    }
+                }
+                ctx.values.drain(variable_scope_index..);
+                ctx.idents.drain(variable_scope_index..);
                 res
             }
             _ => N::Unit,
         },
-
         N::Binary(op, l, r) => {
             if let BinOp::Assign = op {
-                let n = ctx.n(l);
-                if let N::Get(name) = n {
-                    if let Some((key, _)) = ctx.find_var(&name) {
-                        let v = eval(&r, ctx);
-                        ctx.set_var_absolute(&key, v);
+                if let N::Get(name) = l.as_ref() {
+                    if let Some((key, _)) = ctx.find_var(name) {
+                        let v = eval(r, ctx);
+                        ctx.set_var_absolute(key, name, v);
                     }
                 }
                 return N::Unit;
             }
-            let lt = eval(&l, ctx);
-            let rt = eval(&r, ctx);
-            match (op, &lt, &rt) {
+            let lt = eval(l, ctx);
+            let rt = eval(r, ctx);
+            match (op.clone(), &lt, &rt) {
                 (BinOp::Plus, N::Num(li), N::Num(ri)) => N::Num(li + ri),
                 (BinOp::Greater, N::Num(li), N::Num(ri)) => bool_n(li > ri),
                 (BinOp::Lesser, N::Num(li), N::Num(ri)) => bool_n(li < ri),
@@ -290,12 +310,85 @@ pub fn eval(ni: &NI, ctx: &mut Ctx) -> N {
                 (BinOp::Plus, N::Str(li), ri) => N::Str(format!("{}{}", li, ri.to_str())),
                 (BinOp::Plus, li, N::Str(ri)) => N::Str(format!("{}{}", li.to_str(), ri)),
                 _ => {
-                    info!("unknown bin  {:?} {:?}", lt, rt);
+                    info!("unknown bin  {:?} {:?} {:?}", lt, op, rt);
                     N::Unit
                 }
             }
         }
-        e => e,
+        N::FuncDef { args_name, scope } => N::FuncDef {
+            args_name: args_name.clone(),
+            scope: bx!(dup(args_name, scope, ctx)),
+        },
+        e => {
+            info!("noop");
+            e.clone()
+        }
+    };
+
+    ctx.deep -= 1;
+    res
+}
+
+/// Create a new FuncDef by replacing known variables (excluding shadowed)
+pub fn dup(exclude: &mut Vec<String>, n: &mut N, ctx: &mut Ctx) -> N {
+    info!("instanciate {:?}", n);
+    match n {
+        N::Block(scope) => N::Block(scope.iter_mut().map(|e| dup(exclude, e, ctx)).collect()),
+        N::While { condition, body } => N::While {
+            condition: bx!(dup(exclude, condition, ctx)),
+            body: bx!(dup(exclude, body, ctx)),
+        },
+        N::FuncCall { func, args } => {
+            let func2 = dup(exclude, func, ctx);
+            let mut args2 = Vec::new();
+            for s in args {
+                args2.push(dup(exclude, s, ctx));
+            }
+            N::FuncCall {
+                func: bx!(func2),
+                args: args2,
+            }
+        }
+        N::FuncDef { args_name, scope } => {
+            let scope2 = dup(exclude, scope, ctx);
+            N::FuncDef {
+                args_name: args_name.clone(),
+                scope: bx!(scope2),
+            }
+        }
+        N::If {
+            condition,
+            path_true,
+            path_false,
+        } => {
+            let c2 = dup(exclude, condition, ctx);
+            let pt = dup(exclude, path_true, ctx);
+            let pf = dup(exclude, path_false, ctx);
+            N::If {
+                condition: bx!(c2),
+                path_true: bx!(pt),
+                path_false: bx!(pf),
+            }
+        }
+        N::Get(name) => {
+            let excluded = exclude.contains(name);
+            if excluded {
+                return N::Get(name.clone());
+            }
+            match ctx.find_var(name) {
+                Some((_, n)) => n,
+                _ => N::Get(name.clone()),
+            }
+        }
+        N::Set(name, val) => {
+            if let Some(index) = exclude.iter().position(|x| x == name) {
+                exclude.remove(index);
+            }
+            N::Set(name.clone(), val.clone())
+        }
+        N::Binary(op, l, r) => N::Binary(*op, bx!(dup(exclude, l, ctx)), bx!(dup(exclude, r, ctx))),
+        N::Array(v) => N::Array(v.iter_mut().map(|e| dup(exclude, e, ctx)).collect()),
+        e => e.clone(),
     }
 }
 
@@ -448,56 +541,43 @@ fn next_token(i: &mut usize, code: &[char]) -> Token {
     }
 }
 
-fn insert_in_parent(ast: &mut AST, parent: NI, child: NI) {
-    match &mut ast[parent] {
-        N::Block(v) => {
-            v.push(child);
-        }
-        N::FuncCall { args, .. } => {
-            args.push(child);
-        }
-        _ => {}
-    }
-}
-
 fn pa(i: usize) -> String {
-    format!("{:width$}", "", width = i * 3)
+    format!("{:width$}", "", width = i * 5)
 }
 type Error = &'static str;
 
-fn parse_expr(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
+fn parse_expr(i: &mut usize, code: &[char], pad: usize) -> Result<N, Error> {
     info!(
         "{}parse expr {:?}",
         pa(pad),
-        &code[*i..(*i + 5).min(code.len() - 1)]
+        &code[*i..(*i + 5).min(if code.is_empty() { *i } else { code.len() - 1 })]
     );
-    let term = parse_term(ast, i, code, pad + 1)?;
+    let term = parse_term(i, code, pad + 1)?;
 
     let mut j = *i;
     let token = next_token(&mut j, code);
 
     if let Token::Bin(op) = token {
-        if op.clone().term_separate() {
+        // if op.term_separate()
+        {
             *i = j;
-            let term_right = parse_expr(ast, i, code, pad + 1)?;
-            let n = N::Binary(op, term, term_right);
-            let block_ni = ast.len();
-            ast.push(n);
-            return Ok(block_ni);
+            let term_right = parse_expr(i, code, pad + 1)?;
+            let n = N::Binary(op, bx!(term), bx!(term_right));
+            return Ok(n);
         }
     }
 
     Ok(term)
 }
 
-fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
+fn parse_term(i: &mut usize, code: &[char], pad: usize) -> Result<N, Error> {
     info!(
         "{}parse_term {:?}",
         pa(pad),
-        &code[*i..(*i + 5).min(code.len() - 1)]
+        &code[*i..(*i + 5).min(if code.is_empty() { *i } else { code.len() - 1 })]
     );
 
-    let factor = parse_factor(ast, i, code, pad + 1)?;
+    let factor = parse_factor(i, code, pad + 1)?;
     let mut j = *i;
     let token = next_token(&mut j, code);
     info!("{:?}", token);
@@ -505,31 +585,25 @@ fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result
         Token::Bin(BinOp::Mul) | Token::Bin(BinOp::Div) | Token::ParStart => {
             *i = j;
             match token {
-                Token::Bin(op) => {
-                    let factor_right = parse_term(ast, i, code, pad + 1)?;
-                    let n = N::Binary(op, factor, factor_right);
-                    let block_ni = ast.len();
-                    ast.push(n);
-                    return Ok(block_ni);
+                Token::Bin(op) if !op.term_separate() => {
+                    let factor_right = parse_term(i, code, pad + 1)?;
+                    let n = N::Binary(op, bx!(factor), bx!(factor_right));
+                    return Ok(n);
                 }
 
                 Token::ParStart => {
                     info!("Function call start");
-                    let n = N::FuncCall {
-                        func: factor,
-                        args: Vec::new(),
-                    };
-                    let ni: usize = ast.len();
-                    ast.push(n);
+                    let mut args = Vec::new();
                     loop {
                         info!("args enum");
                         let mut j = *i;
-                        let e = parse_expr(ast, &mut j, code, pad + 1);
+                        let e = parse_expr(&mut j, code, pad + 1);
                         match e {
                             Ok(expr) => {
                                 info!("args enum got");
                                 *i = j;
-                                insert_in_parent(ast, ni, expr);
+                                args.push(expr);
+
                                 let mut k = *i;
                                 let token = next_token(&mut k, code);
                                 if let Token::Comma = token {
@@ -544,7 +618,10 @@ fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result
                     }
                     let token = next_token(i, code);
                     if let Token::ParEnd = token {
-                        return Ok(ni);
+                        return Ok(N::FuncCall {
+                            func: bx!(factor),
+                            args,
+                        });
                     } else {
                         return Err("No parenthesis close");
                     }
@@ -558,7 +635,7 @@ fn parse_term(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result
     Ok(factor)
 }
 
-fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Result<NI, Error> {
+fn parse_factor(i: &mut usize, code: &[char], pad: usize) -> Result<N, Error> {
     if *i >= code.len() {
         return Err("EOF");
     }
@@ -566,22 +643,21 @@ fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Resu
     info!(
         "{}parse_factor {:?}",
         pa(pad),
-        &code[*i..(*i + 5).min(code.len() - 1)]
+        &code[*i..(*i + 5).min(if code.is_empty() { *i } else { code.len() - 1 })]
     );
 
     let token = next_token(i, code);
     info!("{}{:?}", pa(pad), token);
     if let Token::BlockStart = token {
-        let block_ni = ast.len();
-        ast.push(N::Block(Vec::new()));
+        let mut scope = Vec::new();
 
         loop {
             let mut j = *i;
-            let e = parse_expr(ast, &mut j, code, pad + 1);
+            let e = parse_expr(&mut j, code, pad + 1);
             match e {
                 Ok(expr) => {
                     *i = j;
-                    insert_in_parent(ast, block_ni, expr)
+                    scope.push(expr);
                 }
                 Err(_) => {
                     break;
@@ -590,7 +666,7 @@ fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Resu
         }
         let token = next_token(i, code);
         if let Token::BlockEnd = token {
-            return Ok(block_ni);
+            return Ok(N::Block(scope));
         } else {
             return Err("No block end");
         }
@@ -617,11 +693,13 @@ fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Resu
 
         let token = next_token(i, code);
         if let Token::Assoc = token {
-            let scope = parse_expr(ast, i, code, pad + 1)?;
-            let n = N::FuncDef { args_name, scope };
-            let ni: usize = ast.len();
-            ast.push(n);
-            return Ok(ni);
+            let scope = parse_expr(i, code, pad + 1)?;
+            let n = N::FuncDef {
+                args_name,
+                scope: bx!(scope),
+            };
+
+            return Ok(n);
         } else {
             return Err("No => after func def");
         }
@@ -629,64 +707,52 @@ fn parse_factor(ast: &mut AST, i: &mut usize, code: &[char], pad: usize) -> Resu
 
     if let Token::Quoted(s) = token {
         let n = N::Str(s);
-        let node_ni = ast.len();
-        ast.push(n);
-        return Ok(node_ni);
+        return Ok(n);
     }
 
     if let Token::While = token {
-        let condition = parse_expr(ast, i, code, pad + 1)?;
-        let body = parse_expr(ast, i, code, pad + 1)?;
-        let n = N::While { condition, body };
-        let node_ni = ast.len();
-        ast.push(n);
-        return Ok(node_ni);
+        let condition = parse_expr(i, code, pad + 1)?;
+        let body = parse_expr(i, code, pad + 1)?;
+        let n = N::While {
+            condition: bx!(condition),
+            body: bx!(body),
+        };
+
+        return Ok(n);
     }
 
     if let Token::If = token {
-        let cond_expr = parse_expr(ast, i, code, pad + 1)?;
-        let true_expr = parse_expr(ast, i, code, pad + 1)?;
+        let cond_expr = parse_expr(i, code, pad + 1)?;
+        let true_expr = parse_expr(i, code, pad + 1)?;
         let mut j = *i;
         let token = next_token(&mut j, code);
         let else_expr;
         if let Token::Else = token {
             *i = j;
-            else_expr = parse_expr(ast, i, code, pad + 1)?;
+            else_expr = parse_expr(i, code, pad + 1)?;
         } else {
-            let n = N::Unit;
-            else_expr = ast.len();
-            ast.push(n);
+            else_expr = N::Unit;
         }
         let n = N::If {
-            condition: cond_expr,
-            path_true: true_expr,
-            path_false: else_expr,
+            condition: bx!(cond_expr),
+            path_true: bx!(true_expr),
+            path_false: bx!(else_expr),
         };
-        let ifn = ast.len();
-        ast.push(n);
-        return Ok(ifn);
+        return Ok(n);
     }
 
     if let Token::Let(name) = token {
-        let val = parse_expr(ast, i, code, pad + 1)?;
-        let n = N::Set(name, val);
-        let set_expr_ni: usize = ast.len();
-        ast.push(n);
-        return Ok(set_expr_ni);
+        let val = parse_expr(i, code, pad + 1)?;
+        let n = N::Set(name, bx!(val));
+        return Ok(n);
     }
 
     if let Token::N(N::Num(num)) = token {
-        let n = N::Num(num);
-        let expr_ni: usize = ast.len();
-        ast.push(n);
-        return Ok(expr_ni);
+        return Ok(N::Num(num));
     }
 
     if let Token::N(N::Get(name)) = token {
-        let n = N::Get(name);
-        let expr_ni: usize = ast.len();
-        ast.push(n);
-        return Ok(expr_ni);
+        return Ok(N::Get(name));
     }
 
     Err("No term found")

@@ -294,7 +294,7 @@ fn op_boolean_0() {
 #[test]
 fn op_boolean_1() {
     let code = r#"{
-        1&parent
+        1&0
         }"#;
     let res = parse_eval(&code);
     if let N::Num(x) = res {
@@ -418,6 +418,20 @@ fib(10)
     let res = parse_eval(&code);
     if let N::Num(x) = res {
         assert_eq!(x, 55.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn factorial() {
+    let code = "
+let fac = (e)=> if e<2 e else fac(e-1)*e
+fac(5)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 120.0)
     } else {
         assert!(false)
     }
