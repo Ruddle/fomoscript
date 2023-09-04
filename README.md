@@ -214,7 +214,7 @@ No bitwise operation yet.
 
 ### Arrays
 
-**Concatenation**
+#### Concatenation
 
 ```
 [1,2,3] ++ [4,5,6]
@@ -222,7 +222,7 @@ No bitwise operation yet.
 
 returns `[1,2,3,4,5,6]`
 
-**Push**
+#### Push
 
 ```
 [1,2,3] + 4
@@ -236,7 +236,7 @@ returns `[1,2,3,4]`
 
 returns `[1,2,3,[4,5,6]]`
 
-**Prepend**
+#### Prepend
 
 ```
 4 + [1,2,3]
@@ -244,7 +244,7 @@ returns `[1,2,3,[4,5,6]]`
 
 returns `[4,1,2,3]`
 
-**Get**
+#### Get
 
 ```
 [1,2,3](1)
@@ -252,7 +252,7 @@ returns `[4,1,2,3]`
 
 returns `2`
 
-**Get in reverse order**
+#### Get in reverse order
 
 ```
 [1,2,3](-1)
@@ -260,7 +260,7 @@ returns `2`
 
 returns `3`
 
-**Map**
+#### Map
 
 ```
 [1,2,3]((e) => e*2)
@@ -276,7 +276,7 @@ returns `[2,4,6]`
 
 returns `[0,1,2]`
 
-**Filter**
+#### Filter
 
 ```
 [1,2,3] & (e)=> e<3
@@ -290,7 +290,7 @@ returns `[1,2]`
 
 returns `[1,3]`
 
-**Reduce**
+#### Reduce
 
 ```
 [1,2,3,4] | (a,b)=> a+b
@@ -298,7 +298,13 @@ returns `[1,3]`
 
 returns `10`
 
-**Length**
+```
+["hello","beautiful", "world"] | (a,b) => a+" "+b
+```
+
+returns `"hello beautiful world"`
+
+#### Length
 
 ```
 [0,1,2]()
