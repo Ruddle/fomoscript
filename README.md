@@ -94,7 +94,7 @@ let print_closure = Rc::new(|a: N, _, _, _| {
     println!("{}", a.to_str());
     N::Unit
 });
-ctx.set_var_absolute("my_print", N::FuncNativeDef(Native(print_closure)));
+ctx.set_val("my_print", N::FuncNativeDef(Native(print_closure)));
 
 let expr = ctx.parse_next_expr().unwrap();
 let _ = eval(&expr, &mut ctx);
@@ -102,6 +102,7 @@ let _ = eval(&expr, &mut ctx);
 
 ### REPL
 
+Build your own REPL with this code snippet.
 For simplicity, std is used here, but you can replace it with any input and output impl.
 
 ```rust
@@ -121,9 +122,9 @@ loop {
 
 # Cruelly missing
 
-- Arrays
-- Javascript-like objects (we just have Number and String 😱)
-- Error handling (now it just UB if something goes wrong)
+- Standard library
+- Javascript-like objects
+- Error handling
 - Escape characters in quoted strings
 - Months of work
 - Pattern matching
@@ -143,6 +144,7 @@ Should be panic free during eval. Don't trust the parser just yet.
 - [x] Custom native function
 - [x] Anonymous function call$
 - [x] REPL example
+- [x] [Arrays](#arrays)
 
 # Performance
 
@@ -196,7 +198,7 @@ let x = {
 }
 ```
 
-There is no parenthesis, use brackets to force factorization and precedence.
+There is no parenthesis, **use brackets** to force factorization, precedence, and remove any **ambiguity**.
 
 `\n` is just a whitespace like space. It doesn't separate statements more than space, unlike most languages.
 
@@ -209,3 +211,97 @@ the (and,or) operators are (`&`,`|`)
 `1 | 0` evaluate to 1
 
 No bitwise operation yet.
+
+### Arrays
+
+**Concatenation**
+
+```
+[1,2,3] ++ [4,5,6]
+```
+
+returns `[1,2,3,4,5,6]`
+
+**Push**
+
+```
+[1,2,3] + 4
+```
+
+returns `[1,2,3,4]`
+
+```
+[1,2,3] + [4,5,6]
+```
+
+returns `[1,2,3,[4,5,6]]`
+
+**Prepend**
+
+```
+4 + [1,2,3]
+```
+
+returns `[4,1,2,3]`
+
+**Get**
+
+```
+[1,2,3](1)
+```
+
+returns `2`
+
+**Get in reverse order**
+
+```
+[1,2,3](-1)
+```
+
+returns `3`
+
+**Map**
+
+```
+[1,2,3]((e) => e*2)
+```
+
+returns `[2,4,6]`
+
+2nd argument is the index of the element:
+
+```
+[1,2,3]((e,i) => i)
+```
+
+returns `[0,1,2]`
+
+**Filter**
+
+```
+[1,2,3] & (e)=> e<3
+```
+
+returns `[1,2]`
+
+```
+[1,2,3] & (e,i)=> i!=1
+```
+
+returns `[1,3]`
+
+**Reduce**
+
+```
+[1,2,3,4] | (a,b)=> a+b
+```
+
+returns `10`
+
+**Length**
+
+```
+[0,1,2]()
+```
+
+returns `3`

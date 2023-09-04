@@ -33,7 +33,8 @@ pub enum N {
     },
     Set(ID, BN),
     Get(ID),
-    Binary(BinOp, BN, BN),
+    Unary(Op, BN),
+    Binary(Op, BN, BN),
     //Terminal nodes, the following nodes can be output by eval
     FuncDef {
         args_name: Vec<ID>,
@@ -58,7 +59,7 @@ impl core::fmt::Debug for Native {
 
 #[repr(u8)]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub enum BinOp {
+pub enum Op {
     Mul = 0,
     Div = 1,
     Equals,
@@ -69,10 +70,12 @@ pub enum BinOp {
     And,
     Or,
     Plus,
+    Plus2,
+    Shift,
     Minus,
     Assign,
 }
-impl BinOp {
+impl Op {
     fn term_separate(self) -> bool {
         self as u8 > 1
     }
@@ -117,7 +120,7 @@ enum Token {
     ParEnd,
     While,
     Quoted(String),
-    Bin(BinOp),
+    Bin(Op),
     N(N),
     Let(ID),
     Err(String),
@@ -143,14 +146,21 @@ impl Ctx {
             deep: 0,
         }
     }
+
     #[inline(always)]
-    pub fn set_var_scoped(&mut self, name: &str, n: N) {
+    pub fn drain(&mut self, from: usize) {
+        self.values.drain(from..);
+        self.idents.drain(from..);
+    }
+
+    #[inline(always)]
+    pub fn set_val(&mut self, name: &str, n: N) {
         self.idents.push(String::from(name));
         self.values.push(n);
     }
 
     #[inline(always)]
-    pub fn set_var_absolute(&mut self, i: usize, name: &str, n: N) {
+    pub fn set_val_absolute(&mut self, i: usize, name: &str, n: N) {
         self.idents[i] = String::from(name);
         self.values[i] = n;
     }
@@ -244,13 +254,12 @@ pub fn eval(n: &N, ctx: &mut Ctx) -> N {
                     );
                 }
             }
-            ctx.values.drain(variable_skip_begin..);
-            ctx.idents.drain(variable_skip_begin..);
+            ctx.drain(variable_skip_begin);
             res
         }
         N::Set(name, val) => {
             let val = eval(val, ctx);
-            ctx.set_var_scoped(name, val);
+            ctx.set_val(name, val);
             N::Unit
         }
         N::Get(name) => ctx.find_var(name).map(|e| e.1.clone()).unwrap_or(N::Unit),
@@ -268,7 +277,7 @@ pub fn eval(n: &N, ctx: &mut Ctx) -> N {
                 let variable_scope_index = ctx.values.len();
                 for (i, arg_name) in args_name.iter().enumerate() {
                     let val = args.get(i).map(|e| eval(e, ctx)).unwrap_or(N::Unit);
-                    ctx.set_var_scoped(arg_name, val);
+                    ctx.set_val(arg_name, val);
                 }
                 let res = eval(&mut scope, ctx);
                 if log::log_enabled!(log::Level::Info) {
@@ -276,18 +285,47 @@ pub fn eval(n: &N, ctx: &mut Ctx) -> N {
                         info!("forget {} {:?}:  {:?}", i, ctx.idents[i], ctx.values[i]);
                     }
                 }
-                ctx.values.drain(variable_scope_index..);
-                ctx.idents.drain(variable_scope_index..);
+                ctx.drain(variable_scope_index);
                 res
+            }
+            N::Array(mut v) => {
+                if let Some(index) = args.first().map(|e| eval(e, ctx)) {
+                    match index {
+                        N::Num(i) => {
+                            let mut i = i as isize;
+                            if i < 0 {
+                                i = v.len() as isize + (i as isize);
+                            }
+                            v.get(i as usize).cloned().unwrap_or(N::Unit)
+                        }
+                        N::FuncDef { args_name, scope } => {
+                            for (index, e) in v.iter_mut().enumerate() {
+                                let variable_scope_index = ctx.values.len();
+                                if let Some(s) = args_name.first() {
+                                    ctx.set_val(s, e.clone());
+                                }
+                                if let Some(s) = args_name.get(1) {
+                                    ctx.set_val(s, N::Num(index as f64));
+                                }
+                                *e = eval(&scope, ctx);
+                                ctx.drain(variable_scope_index);
+                            }
+                            N::Array(v)
+                        }
+                        _ => N::Unit,
+                    }
+                } else {
+                    N::Num(v.len() as f64)
+                }
             }
             _ => N::Unit,
         },
         N::Binary(op, l, r) => {
-            if let BinOp::Assign = op {
+            if let Op::Assign = op {
                 if let N::Get(name) = l.as_ref() {
                     if let Some((key, _)) = ctx.find_var(name) {
                         let v = eval(r, ctx);
-                        ctx.set_var_absolute(key, name, v);
+                        ctx.set_val_absolute(key, name, v);
                     }
                 }
                 return N::Unit;
@@ -295,25 +333,65 @@ pub fn eval(n: &N, ctx: &mut Ctx) -> N {
             let lt = eval(l, ctx);
             let rt = eval(r, ctx);
             match (op.clone(), &lt, &rt) {
-                (BinOp::Plus, N::Num(li), N::Num(ri)) => N::Num(li + ri),
-                (BinOp::Greater, N::Num(li), N::Num(ri)) => bool_n(li > ri),
-                (BinOp::Lesser, N::Num(li), N::Num(ri)) => bool_n(li < ri),
-                (BinOp::Equals, N::Num(li), N::Num(ri)) => bool_n(li == ri),
-                (BinOp::Equals, N::Str(li), N::Str(ri)) => bool_n(li == ri),
-                (BinOp::NotEquals, N::Num(li), N::Num(ri)) => bool_n(li != ri),
-                (BinOp::NotEquals, N::Str(li), N::Str(ri)) => bool_n(li != ri),
-                (BinOp::And, li, ri) => bool_n(li.to_bool() && ri.to_bool()),
-                (BinOp::Or, li, ri) => bool_n(li.to_bool() || ri.to_bool()),
-                (BinOp::Minus, N::Num(li), N::Num(ri)) => N::Num(li - ri),
-                (BinOp::Mul, N::Num(li), N::Num(ri)) => N::Num(li * ri),
-                (BinOp::Div, N::Num(li), N::Num(ri)) => N::Num(li / ri),
-                (BinOp::Modulus, N::Num(li), N::Num(ri)) => N::Num(li.rem(ri)),
-                (BinOp::Plus, N::Str(li), ri) => N::Str(format!("{}{}", li, ri.to_str())),
-                (BinOp::Plus, li, N::Str(ri)) => N::Str(format!("{}{}", li.to_str(), ri)),
-                (BinOp::Plus, N::Array(li), N::Array(ri)) => {
+                (Op::Plus, N::Num(li), N::Num(ri)) => N::Num(li + ri),
+                (Op::Plus, N::Num(li), N::Unit) => N::Num(*li),
+                (Op::Plus, N::Unit, N::Num(ri)) => N::Num(*ri),
+                (Op::Greater, N::Num(li), N::Num(ri)) => bool_n(li > ri),
+                (Op::Lesser, N::Num(li), N::Num(ri)) => bool_n(li < ri),
+                (Op::Equals, N::Num(li), N::Num(ri)) => bool_n(li == ri),
+                (Op::Equals, N::Str(li), N::Str(ri)) => bool_n(li == ri),
+                (Op::NotEquals, N::Num(li), N::Num(ri)) => bool_n(li != ri),
+                (Op::NotEquals, N::Str(li), N::Str(ri)) => bool_n(li != ri),
+                (Op::Minus, N::Num(li), N::Num(ri)) => N::Num(li - ri),
+                (Op::Mul, N::Num(li), N::Num(ri)) => N::Num(li * ri),
+                (Op::Div, N::Num(li), N::Num(ri)) => N::Num(li / ri),
+                (Op::Modulus, N::Num(li), N::Num(ri)) => N::Num(li.rem(ri)),
+                (Op::Plus, N::Str(li), ri) => N::Str(format!("{}{}", li, ri.to_str())),
+                (Op::Plus, li, N::Str(ri)) => N::Str(format!("{}{}", li.to_str(), ri)),
+                (Op::Plus2, N::Array(li), N::Array(ri)) => {
                     N::Array(li.iter().chain(ri).cloned().collect())
                 }
+                (Op::Plus, N::Array(li), ri) => {
+                    N::Array(li.iter().chain(core::iter::once(ri)).cloned().collect())
+                }
+                (Op::Plus, li, N::Array(ri)) => {
+                    N::Array(core::iter::once(li).chain(ri.iter()).cloned().collect())
+                }
+                (Op::And, N::Array(li), N::FuncDef { args_name, scope }) => {
+                    let mut new_arr = Vec::new();
+                    for (index, e) in li.iter().enumerate() {
+                        let variable_scope_index = ctx.values.len();
+                        if let Some(s) = args_name.first() {
+                            ctx.set_val(s, e.clone());
+                        }
+                        if let Some(s) = args_name.get(1) {
+                            ctx.set_val(s, N::Num(index as f64));
+                        }
+                        if eval(&scope, ctx).to_bool() {
+                            new_arr.push(e.clone());
+                        }
+                        ctx.drain(variable_scope_index);
+                    }
+                    N::Array(new_arr)
+                }
+                (Op::Or, N::Array(li), N::FuncDef { args_name, scope }) => {
+                    let mut acc = li.first().cloned().unwrap_or(N::Unit);
 
+                    for e in li.iter().skip(1) {
+                        let variable_scope_index = ctx.values.len();
+                        if let Some(s) = args_name.first() {
+                            ctx.set_val(s, acc);
+                        }
+                        if let Some(s) = args_name.get(1) {
+                            ctx.set_val(s, e.clone());
+                        }
+                        acc = eval(&scope, ctx);
+                        ctx.drain(variable_scope_index);
+                    }
+                    acc
+                }
+                (Op::And, li, ri) => bool_n(li.to_bool() && ri.to_bool()),
+                (Op::Or, li, ri) => bool_n(li.to_bool() || ri.to_bool()),
                 _ => {
                     info!("unknown bin  {:?} {:?} {:?}", lt, op, rt);
                     N::Unit
@@ -493,8 +571,10 @@ fn next_token(i: &mut usize, code: &[char]) -> Token {
         }
 
         for (st, tok) in [
-            ("==", Token::Bin(BinOp::Equals)),
-            ("!=", Token::Bin(BinOp::NotEquals)),
+            ("==", Token::Bin(Op::Equals)),
+            ("!=", Token::Bin(Op::NotEquals)),
+            ("++", Token::Bin(Op::Plus2)),
+            ("<<", Token::Bin(Op::Shift)),
             ("=>", Token::Assoc),
         ] {
             if starts_with(*i, st) {
@@ -509,16 +589,16 @@ fn next_token(i: &mut usize, code: &[char]) -> Token {
             (',', Token::Comma),
             ('(', Token::ParStart),
             (')', Token::ParEnd),
-            ('=', Token::Bin(BinOp::Assign)),
-            ('+', Token::Bin(BinOp::Plus)),
-            ('-', Token::Bin(BinOp::Minus)),
-            ('*', Token::Bin(BinOp::Mul)),
-            ('/', Token::Bin(BinOp::Div)),
-            ('>', Token::Bin(BinOp::Greater)),
-            ('<', Token::Bin(BinOp::Lesser)),
-            ('%', Token::Bin(BinOp::Modulus)),
-            ('&', Token::Bin(BinOp::And)),
-            ('|', Token::Bin(BinOp::Or)),
+            ('=', Token::Bin(Op::Assign)),
+            ('+', Token::Bin(Op::Plus)),
+            ('-', Token::Bin(Op::Minus)),
+            ('*', Token::Bin(Op::Mul)),
+            ('/', Token::Bin(Op::Div)),
+            ('>', Token::Bin(Op::Greater)),
+            ('<', Token::Bin(Op::Lesser)),
+            ('%', Token::Bin(Op::Modulus)),
+            ('&', Token::Bin(Op::And)),
+            ('|', Token::Bin(Op::Or)),
             ('[', Token::ArrayStart),
             (']', Token::ArrayEnd),
         ] {
@@ -573,7 +653,7 @@ fn parse_term(i: &mut usize, code: &[char], pad: usize) -> Result<N, Error> {
     let token = next_token(&mut j, code);
     info!("{:?}", token);
     match token {
-        Token::Bin(BinOp::Mul) | Token::Bin(BinOp::Div) | Token::ParStart => {
+        Token::Bin(Op::Mul) | Token::Bin(Op::Div) | Token::ParStart => {
             *i = j;
             match token {
                 Token::Bin(op) if !op.term_separate() => {

@@ -227,7 +227,7 @@ fn op_greater() {
 #[test]
 fn missing_args() {
     let code = r#"{
-        let f = (a,b,c)=> a+b+c
+        let f = (a,b,c)=> c
         f(1,2)
         }"#;
     let res = parse_eval(&code);
@@ -496,11 +496,127 @@ fn array_concat() {
     let code = "
     let a = [1,2,3]
     let b = [4,5,6]
-    a+b
+    a++b
 ";
     let res = parse_eval(&code);
     if let N::Array(v) = res {
         assert_eq!(v.len(), 6)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_get() {
+    let code = "
+    let a = [1,2,3]
+    a(1)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 2.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_get_overflow() {
+    let code = "
+    let a = [1,2,3]
+    a(4)
+";
+    let res = parse_eval(&code);
+    if let N::Unit = res {
+        assert!(true)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_get_underflow() {
+    let code = "
+    let a = [1,2,3]
+    a(0-1)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 3.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_get_get() {
+    let code = "
+    let a = [1,[2.1,2.2,2.3],3]
+    {a(1)}(1)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 2.2)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_push() {
+    let code = "
+    let a = [1,2,3]
+    a = a+4
+    a(3)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 4.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_prepend() {
+    let code = "
+    let a = [1,2,3]
+    a = 4 + a
+    a(0)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 4.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_push_array() {
+    let code = "
+    let a = [1,2,3]
+    a = a+[4,5,6]
+    {a(3)}(1)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 5.0)
+    } else {
+        assert!(false)
+    }
+}
+
+#[test]
+fn array_map() {
+    let code = "
+    {
+        [1,2,3]((e) => e*2)
+    }(1)
+";
+    let res = parse_eval(&code);
+    if let N::Num(x) = res {
+        assert_eq!(x, 4.0)
     } else {
         assert!(false)
     }
