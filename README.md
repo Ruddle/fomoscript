@@ -51,7 +51,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-fomoscript = "0.2.1"
+fomoscript = "0.2.4"
 ```
 
 Parse and evaluate a script:

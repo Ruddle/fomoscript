@@ -489,3 +489,19 @@ fn excluded_from_func_dup() {
         assert!(false)
     }
 }
+
+#[test]
+fn array_concat() {
+    // f instanciation (dup) should capture a and b, but not c, c is shadowed by the function argument variable
+    let code = "
+    let a = [1,2,3]
+    let b = [4,5,6]
+    a+b
+";
+    let res = parse_eval(&code);
+    if let N::Array(v) = res {
+        assert_eq!(v.len(), 6)
+    } else {
+        assert!(false)
+    }
+}

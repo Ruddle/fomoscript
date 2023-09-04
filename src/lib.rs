@@ -122,6 +122,8 @@ enum Token {
     Let(ID),
     Err(String),
     Assoc,
+    ArrayStart,
+    ArrayEnd,
 }
 
 /// Interpreter context, holds all state during execution.
@@ -308,6 +310,10 @@ pub fn eval(n: &N, ctx: &mut Ctx) -> N {
                 (BinOp::Modulus, N::Num(li), N::Num(ri)) => N::Num(li.rem(ri)),
                 (BinOp::Plus, N::Str(li), ri) => N::Str(format!("{}{}", li, ri.to_str())),
                 (BinOp::Plus, li, N::Str(ri)) => N::Str(format!("{}{}", li.to_str(), ri)),
+                (BinOp::Plus, N::Array(li), N::Array(ri)) => {
+                    N::Array(li.iter().chain(ri).cloned().collect())
+                }
+
                 _ => {
                     info!("unknown bin  {:?} {:?} {:?}", lt, op, rt);
                     N::Unit
@@ -513,6 +519,8 @@ fn next_token(i: &mut usize, code: &[char]) -> Token {
             ('%', Token::Bin(BinOp::Modulus)),
             ('&', Token::Bin(BinOp::And)),
             ('|', Token::Bin(BinOp::Or)),
+            ('[', Token::ArrayStart),
+            (']', Token::ArrayEnd),
         ] {
             if code[*i] == key {
                 *i += 1;
@@ -653,6 +661,31 @@ fn parse_factor(i: &mut usize, code: &[char], pad: usize) -> Result<N, Error> {
         } else {
             return Err("No block end");
         }
+    }
+
+    if let Token::ArrayStart = token {
+        let mut es = Vec::new();
+
+        loop {
+            let mut j = *i;
+            let next = parse_expr(&mut j, code, pad);
+            match next {
+                Ok(expr) => {
+                    *i = j;
+                    es.push(expr)
+                }
+                Err(_) => {
+                    let next = next_token(i, code);
+                    match next {
+                        Token::Comma => continue,
+                        Token::ArrayEnd => break,
+                        _ => break,
+                    }
+                }
+            }
+        }
+
+        return Ok(N::Array(es));
     }
 
     if let Token::ParStart = token {
