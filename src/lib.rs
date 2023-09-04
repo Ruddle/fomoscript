@@ -4,7 +4,7 @@ extern crate alloc;
 use alloc::{boxed::Box, format, string::String, vec::Vec};
 use core::{ops::Rem, result::Result};
 
-pub type Identifier = String;
+pub type ID = String;
 pub type BN = Box<N>;
 pub type VN = Vec<N>;
 
@@ -31,12 +31,12 @@ pub enum N {
         condition: BN,
         body: BN,
     },
-    Set(Identifier, BN),
-    Get(Identifier),
+    Set(ID, BN),
+    Get(ID),
     Binary(BinOp, BN, BN),
     //Terminal nodes, the following nodes can be output by eval
     FuncDef {
-        args_name: Vec<Identifier>,
+        args_name: Vec<ID>,
         scope: BN,
     },
     FuncNativeDef(Native),
@@ -119,7 +119,7 @@ enum Token {
     Quoted(String),
     Bin(BinOp),
     N(N),
-    Let(Identifier),
+    Let(ID),
     Err(String),
     Assoc,
 }
@@ -155,10 +155,10 @@ impl Ctx {
     /// Find a variable declared in the scope, or any parent scope
     ///
     /// returns the path and the variable value
-    pub fn find_var(&self, name: &str) -> Option<(usize, N)> {
+    pub fn find_var(&mut self, name: &str) -> Option<(usize, &mut N)> {
         for (i, id) in self.idents.iter().enumerate().rev() {
             if id == name {
-                return Some((i, self.values[i].clone()));
+                return Some((i, &mut self.values[i]));
             }
         }
         info!("Unknown variable {}", name);
@@ -242,7 +242,6 @@ pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
                     );
                 }
             }
-
             ctx.values.drain(variable_skip_begin..);
             ctx.idents.drain(variable_skip_begin..);
             res
@@ -252,7 +251,7 @@ pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
             ctx.set_var_scoped(name, val);
             N::Unit
         }
-        N::Get(name) => ctx.find_var(name).map(|e| e.1).unwrap_or(N::Unit),
+        N::Get(name) => ctx.find_var(name).map(|e| e.1.clone()).unwrap_or(N::Unit),
         N::FuncCall { func, args } => match eval(func, ctx) {
             N::FuncNativeDef(native) => native.0(
                 args.first_mut().map(|e| eval(e, ctx)).unwrap_or(N::Unit),
@@ -330,64 +329,48 @@ pub fn eval(n: &mut N, ctx: &mut Ctx) -> N {
 }
 
 /// Create a new FuncDef by replacing known variables (excluding shadowed)
-pub fn dup(exclude: &mut Vec<String>, n: &mut N, ctx: &mut Ctx) -> N {
+pub fn dup(excl: &mut Vec<ID>, n: &mut N, ctx: &mut Ctx) -> N {
     info!("instanciate {:?}", n);
     match n {
-        N::Block(scope) => N::Block(scope.iter_mut().map(|e| dup(exclude, e, ctx)).collect()),
+        N::Block(scope) => N::Block(scope.iter_mut().map(|e| dup(excl, e, ctx)).collect()),
         N::While { condition, body } => N::While {
-            condition: bx!(dup(exclude, condition, ctx)),
-            body: bx!(dup(exclude, body, ctx)),
+            condition: bx!(dup(excl, condition, ctx)),
+            body: bx!(dup(excl, body, ctx)),
         },
-        N::FuncCall { func, args } => {
-            let func2 = dup(exclude, func, ctx);
-            let mut args2 = Vec::new();
-            for s in args {
-                args2.push(dup(exclude, s, ctx));
-            }
-            N::FuncCall {
-                func: bx!(func2),
-                args: args2,
-            }
-        }
-        N::FuncDef { args_name, scope } => {
-            let scope2 = dup(exclude, scope, ctx);
-            N::FuncDef {
-                args_name: args_name.clone(),
-                scope: bx!(scope2),
-            }
-        }
+        N::FuncCall { func, args } => N::FuncCall {
+            func: bx!(dup(excl, func, ctx)),
+            args: args.iter_mut().map(|e| dup(excl, e, ctx)).collect(),
+        },
+        N::FuncDef { args_name, scope } => N::FuncDef {
+            args_name: args_name.clone(),
+            scope: bx!(dup(excl, scope, ctx)),
+        },
         N::If {
             condition,
             path_true,
             path_false,
-        } => {
-            let c2 = dup(exclude, condition, ctx);
-            let pt = dup(exclude, path_true, ctx);
-            let pf = dup(exclude, path_false, ctx);
-            N::If {
-                condition: bx!(c2),
-                path_true: bx!(pt),
-                path_false: bx!(pf),
-            }
-        }
+        } => N::If {
+            condition: bx!(dup(excl, condition, ctx)),
+            path_true: bx!(dup(excl, path_true, ctx)),
+            path_false: bx!(dup(excl, path_false, ctx)),
+        },
         N::Get(name) => {
-            let excluded = exclude.contains(name);
-            if excluded {
+            if excl.contains(name) {
                 return N::Get(name.clone());
             }
             match ctx.find_var(name) {
-                Some((_, n)) => n,
+                Some((_, n)) => n.clone(),
                 _ => N::Get(name.clone()),
             }
         }
         N::Set(name, val) => {
-            if let Some(index) = exclude.iter().position(|x| x == name) {
-                exclude.remove(index);
+            if let Some(index) = excl.iter().position(|x| x == name) {
+                excl.remove(index);
             }
             N::Set(name.clone(), val.clone())
         }
-        N::Binary(op, l, r) => N::Binary(*op, bx!(dup(exclude, l, ctx)), bx!(dup(exclude, r, ctx))),
-        N::Array(v) => N::Array(v.iter_mut().map(|e| dup(exclude, e, ctx)).collect()),
+        N::Binary(op, l, r) => N::Binary(*op, bx!(dup(excl, l, ctx)), bx!(dup(excl, r, ctx))),
+        N::Array(v) => N::Array(v.iter_mut().map(|e| dup(excl, e, ctx)).collect()),
         e => e.clone(),
     }
 }
