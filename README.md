@@ -122,6 +122,7 @@ loop {
 
 # Cruelly missing
 
+- Pass by reference
 - Standard library
 - Javascript-like objects
 - Error handling
@@ -140,9 +141,11 @@ Should be panic free during eval. Don't trust the parser just yet.
 - [x] Binary operators +,-,/,\*,>,<,==,!=,&,|
 - [x] Operator precedence
 - [x] Higher order function
-- [x] Control flow if/else/while
+- [x] Functions arguments passed by value
+- [x] Functions capture outer symbols by value
+- [x] Control flow if/else & while
 - [x] Custom native function
-- [x] Anonymous function call$
+- [x] Anonymous function calls
 - [x] REPL example
 - [x] [Arrays](#arrays)
 
@@ -161,6 +164,8 @@ Unstructured number crunching will stay slow.
 Typed arrays (like in js) could be added in the future for fast structured operation.
 
 # Fun facts
+
+fomoscript is a tree-walking interpreted language.
 
 Everything is an expression in fomoscript. For instance if/else acts as a ternary operator.
 
@@ -186,7 +191,7 @@ let x = if 0 {
 
 Same goes for while, it returns `N::Unit` if it never runs the body, or the last body expression if it runs at least once.
 
-Same goes for brackets :
+Same goes for braces :
 
 `let x = {1 2 3}` is equivalent to `let x = {3}` or `let x = 3` or
 
@@ -198,7 +203,7 @@ let x = {
 }
 ```
 
-There is no parenthesis, **use brackets** to force factorization, precedence, and remove any **ambiguity**.
+There is no parenthesis, **use braces** to force factorization, precedence, and remove any **ambiguity**.
 
 `\n` is just a whitespace like space. It doesn't separate statements more than space, unlike most languages.
 

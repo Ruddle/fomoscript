@@ -402,6 +402,7 @@ pub fn eval(n: &N, ctx: &mut Ctx) -> N {
             args_name: args_name.clone(),
             scope: bx!(dup(&mut args_name.clone(), &mut scope.clone(), ctx)),
         },
+        N::Array(v) => N::Array(v.iter().map(|e| eval(e, ctx)).collect()),
         e => {
             info!("noop");
             e.clone()
